@@ -1,0 +1,30 @@
+{
+ "pageProps": {
+  "modelDetail": {
+   "nickName": "پراید 131",
+   "minYear": 1390,
+   "maxYear": 1399
+  },
+  "yearsPriceList": {
+   "lastUpdateTime": "2026-11-13T23:09:19+03:30",
+   "carPriceOtherYearsDetails": [
+    {
+     "modelName": "پراید 131",
+     "modelEnglishName": "pride131",
+     "carYear": 1399,
+     "marketPrice": 790000000,
+     "existPriceZero": false,
+     "carTypeName": "SE"
+    },
+    {
+     "modelName": "پراید 131",
+     "modelEnglishName": "pride131",
+     "carYear": 1398,
+     "marketPrice": 740000000,
+     "existPriceZero": false,
+     "carTypeName": "SE"
+    }
+   ]
+  }
+ }
+}

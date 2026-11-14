@@ -1,0 +1,21 @@
+{
+ "pageProps": {
+  "brands": [
+   {
+    "brandId": 11,
+    "brandName": "سایپا",
+    "brandEnglishName": "saipa"
+   },
+   {
+    "brandId": 1,
+    "brandName": "ایران خودرو",
+    "brandEnglishName": "irankhodro"
+   },
+   {
+    "brandId": 18,
+    "brandName": "تویوتا",
+    "brandEnglishName": "toyota"
+   }
+  ]
+ }
+}

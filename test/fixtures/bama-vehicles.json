@@ -1,0 +1,191 @@
+{
+ "status": true,
+ "errors": [],
+ "metadata": null,
+ "data": [
+  {
+   "type": "brand",
+   "title": "پژو",
+   "selectable": false,
+   "value": "peugeot",
+   "text": "پژو",
+   "id": 0,
+   "items": [
+    {
+     "type": "brand",
+     "title": "پژو",
+     "selectable": true,
+     "select_all": true,
+     "value": "peugeot",
+     "text": "همه مدل های پژو",
+     "keywords": " پژو peugeot",
+     "id": 0
+    },
+    {
+     "type": "model",
+     "title": "پژو 206",
+     "selectable": false,
+     "value": "peugeot,206ir",
+     "text": "پژو 206",
+     "id": 0,
+     "items": [
+      {
+       "type": "model",
+       "title": "پژو 206",
+       "selectable": true,
+       "select_all": true,
+       "value": "peugeot,206ir",
+       "text": "همه نوع پژو 206",
+       "keywords": " پژو 206 peugeot 206ir",
+       "id": 0
+      },
+      {
+       "type": "trim",
+       "title": "پژو 206 تیپ 2",
+       "selectable": true,
+       "select_all": false,
+       "value": "peugeot,206ir,type2",
+       "text": "پژو 206 تیپ 2",
+       "keywords": " دویست و شش پژو۲۰۶ پژو ٢٠٦ 206 تیپ 2 peugeot 206ir type2",
+       "id": 0
+      },
+      {
+       "type": "trim",
+       "title": "پژو 206 تیپ 5",
+       "selectable": true,
+       "select_all": false,
+       "value": "peugeot,206ir,type5",
+       "text": "پژو 206 تیپ 5",
+       "keywords": " دویست و شش پژو۲۰۶ پژو ٢٠٦ 206 تیپ 5 peugeot 206ir type5",
+       "id": 0
+      }
+     ]
+    },
+    {
+     "type": "model",
+     "title": "پژو 206 SD",
+     "selectable": false,
+     "value": "peugeot,206sd",
+     "text": "پژو 206 SD",
+     "id": 0,
+     "items": [
+      {
+       "type": "model",
+       "title": "پژو 206 SD",
+       "selectable": true,
+       "select_all": true,
+       "value": "peugeot,206sd",
+       "text": "همه نوع پژو 206 SD",
+       "keywords": " پژو 206 sd peugeot 206sd",
+       "id": 0
+      },
+      {
+       "type": "trim",
+       "title": "پژو 206 SD V8",
+       "selectable": true,
+       "select_all": false,
+       "value": "peugeot,206sd,v8",
+       "text": "پژو 206 SD V8",
+       "keywords": " دویست و شش صندوقدار پژو۲۰۶ 206 اس دی sd v8 peugeot 206sd",
+       "id": 0
+      }
+     ]
+    },
+    {
+     "type": "model",
+     "title": "پژو 207",
+     "selectable": true,
+     "value": "peugeot,207",
+     "text": "پژو 207",
+     "keywords": " پژو 207 peugeot",
+     "id": 0
+    },
+    {
+     "type": "model",
+     "title": "پژو 2008",
+     "selectable": true,
+     "value": "peugeot,2008",
+     "text": "پژو 2008",
+     "keywords": " پژو 2008 peugeot",
+     "id": 0
+    },
+    {
+     "type": "model",
+     "title": "پژو پارس",
+     "selectable": true,
+     "value": "peugeot,pars",
+     "text": "پژو پارس",
+     "keywords": " پژو پارس پرشیا peugeot pars",
+     "id": 0
+    }
+   ]
+  },
+  {
+   "type": "brand",
+   "title": "پراید",
+   "selectable": false,
+   "value": "pride",
+   "text": "پراید",
+   "id": 0,
+   "items": [
+    {
+     "type": "brand",
+     "title": "پراید",
+     "selectable": true,
+     "select_all": true,
+     "value": "pride",
+     "text": "همه مدل های پراید",
+     "keywords": " پراید pride",
+     "id": 0
+    },
+    {
+     "type": "model",
+     "title": "پراید 131",
+     "selectable": true,
+     "value": "pride,131",
+     "text": "پراید 131",
+     "keywords": " پراید 131 صد و سی و یک pride",
+     "id": 0
+    },
+    {
+     "type": "model",
+     "title": "پراید 111",
+     "selectable": true,
+     "value": "pride,111",
+     "text": "پراید 111",
+     "keywords": " پراید 111 pride",
+     "id": 0
+    }
+   ]
+  },
+  {
+   "type": "brand",
+   "title": "تویوتا",
+   "selectable": false,
+   "value": "toyota",
+   "text": "تویوتا",
+   "id": 0,
+   "items": [
+    {
+     "type": "brand",
+     "title": "تویوتا",
+     "selectable": true,
+     "select_all": true,
+     "value": "toyota",
+     "text": "همه مدل های تویوتا",
+     "keywords": " تویوتا toyota",
+     "id": 0
+    },
+    {
+     "type": "model",
+     "title": "تویوتا کمری",
+     "selectable": true,
+     "value": "toyota,camry",
+     "text": "تویوتا کمری",
+     "keywords": " تویوتا کمری toyota camry",
+     "id": 0
+    }
+   ]
+  }
+ ]
+}

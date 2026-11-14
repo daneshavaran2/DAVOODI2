@@ -1,0 +1,24 @@
+{
+ "pageProps": {
+  "pricesList": [
+   {
+    "brandName": "تویوتا",
+    "brandEnglishName": "toyota",
+    "carPriceDetailsDtos": [
+     {
+      "brandName": "تویوتا",
+      "brandEnglishName": "toyota",
+      "modelName": "کمری",
+      "modelEnglishName": "camry",
+      "carTypeName": "GLX",
+      "nickName": "کمری",
+      "carTypeId": 1,
+      "carYear": 2024,
+      "marketPrice": 9500000000,
+      "existPriceZero": true
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,102 @@
+{
+ "status": true,
+ "errors": [],
+ "metadata": null,
+ "data": {
+  "brand": "peugeot",
+  "brand_fa": "پژو",
+  "model": "206ir",
+  "model_fa": "206",
+  "last_update": "3 ساعت پیش",
+  "items": [
+   {
+    "detail": {
+     "trim": "type2",
+     "trim_fa": "تیپ 2",
+     "model_year": 1405,
+     "class": "",
+     "price": 2350000000,
+     "price_diff": 1.3,
+     "price_date": "3 ساعت پیش",
+     "price_provider": "قیمت بازار"
+    },
+    "history": [
+     {
+      "price": 2279500000,
+      "date": "01 آبان"
+     },
+     {
+      "price": 2350000000,
+      "date": "23 آبان"
+     }
+    ]
+   },
+   {
+    "detail": {
+     "trim": "type2",
+     "trim_fa": "تیپ 2",
+     "model_year": 1405,
+     "class": "",
+     "price": 1485000000,
+     "price_diff": 0,
+     "price_date": "3 ساعت پیش",
+     "price_provider": "قیمت کارخانه"
+    },
+    "history": [
+     {
+      "price": 1440450000,
+      "date": "01 آبان"
+     },
+     {
+      "price": 1485000000,
+      "date": "23 آبان"
+     }
+    ]
+   },
+   {
+    "detail": {
+     "trim": "type5",
+     "trim_fa": "تیپ 5",
+     "model_year": 1405,
+     "class": "",
+     "price": 2620000000,
+     "price_diff": 0.8,
+     "price_date": "3 ساعت پیش",
+     "price_provider": "قیمت بازار"
+    },
+    "history": [
+     {
+      "price": 2541400000,
+      "date": "01 آبان"
+     },
+     {
+      "price": 2620000000,
+      "date": "23 آبان"
+     }
+    ]
+   },
+   {
+    "detail": {
+     "trim": "type5",
+     "trim_fa": "تیپ 5",
+     "model_year": 1405,
+     "class": "",
+     "price": 1690000000,
+     "price_diff": 0,
+     "price_date": "3 ساعت پیش",
+     "price_provider": "قیمت کارخانه"
+    },
+    "history": [
+     {
+      "price": 1639300000,
+      "date": "01 آبان"
+     },
+     {
+      "price": 1690000000,
+      "date": "23 آبان"
+     }
+    ]
+   }
+  ]
+ }
+}
