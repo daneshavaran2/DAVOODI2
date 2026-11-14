@@ -171,6 +171,11 @@ async function startServerVoice() {
   try {
     const res = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
     const data = await res.json().catch(() => ({}));
+    if (res.status === 503 && SR) {
+      // تشخیص گفتار سرور در دسترس نیست؛ از این به بعد تشخیص گفتار مرورگر
+      voiceMode = 'browser';
+      throw new Error('تشخیص گفتار سرور در دسترس نیست؛ دوباره روی میکروفون بزنید (این بار مرورگر گوش می‌دهد).');
+    }
     if (!res.ok) throw new Error(data.error || `خطای سرور (${res.status})`);
     if (!data.text) setStatus('متوجه نشدم؛ لطفاً دوباره و شمرده‌تر بگویید.', true);
     else heard(data.text);

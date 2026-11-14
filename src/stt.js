@@ -59,11 +59,24 @@ export function audioCtxArgs(cfg, seconds) {
 }
 
 /** آیا whisper-cli و فایل مدل روی سرور هست؟ */
+let disabledReason = null;
+
+/** فقط برای تست. */
+export function _resetDisabled() {
+  disabledReason = null;
+}
+
 export async function sttStatus(cfg) {
   cfg = cfg || (await sttConfig());
   const ok = async (p, mode) => !!p && access(p, mode).then(() => true, () => false);
   const [bin, model] = await Promise.all([ok(cfg.bin, FS.X_OK), ok(cfg.model, FS.R_OK)]);
-  return { available: bin && model, bin, model, modelName: cfg.model ? cfg.model.split(/[\\/]/).pop() : null };
+  return {
+    available: bin && model && !disabledReason,
+    bin,
+    model,
+    modelName: cfg.model ? cfg.model.split(/[\\/]/).pop() : null,
+    disabledReason,
+  };
 }
 
 export class SttError extends Error {
@@ -170,13 +183,19 @@ function run(bin, args, timeoutMs) {
       clearTimeout(timer);
       reject(new SttError(`اجرای whisper ممکن نشد: ${e.message}`, 500));
     });
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       clearTimeout(timer);
-      if (code === 0) resolve(out);
-      else {
-        const last = err.trim().split('\n').slice(-3).join(' | ');
-        reject(new SttError(`whisper با خطا تمام شد (کد ${code}): ${last}`, 500));
+      if (code === 0) return resolve(out);
+      if (signal === 'SIGILL') {
+        // پردازندهٔ این سرور دستوری از whisper را ندارد؛ تا راه‌اندازی دوباره خاموش می‌شود و
+        // صفحه به تشخیص گفتار مرورگر برمی‌گردد (به جای خطا در هر درخواست)
+        disabledReason = 'whisper روی پردازندهٔ این سرور اجرا نشد (Illegal instruction).';
+        console.error(`تشخیص گفتار روی سرور خاموش شد: ${disabledReason}`);
+        return reject(new SttError(`${disabledReason} از تشخیص گفتار مرورگر استفاده کنید.`, 503));
       }
+      const last = err.trim().split('\n').slice(-3).join(' | ');
+      const why = signal ? `سیگنال ${signal}` : `کد ${code}`;
+      reject(new SttError(`whisper با خطا تمام شد (${why}): ${last}`, 500));
     });
   });
 }
@@ -188,7 +207,7 @@ export async function transcribe(wav, cfg) {
   if (info.seconds < LIMITS.minSeconds) throw new SttError('صدا خیلی کوتاه بود؛ دوباره بگویید.');
   if (info.seconds > LIMITS.maxSeconds) throw new SttError(`صدا حداکثر ${LIMITS.maxSeconds} ثانیه می‌تواند باشد.`);
   const status = await sttStatus(cfg);
-  if (!status.available) throw new SttError('تشخیص گفتار روی سرور نصب نشده است.', 503);
+  if (!status.available) throw new SttError(status.disabledReason || 'تشخیص گفتار روی سرور نصب نشده است.', 503);
 
   const release = await slot(cfg.concurrency);
   const dir = await mkdtemp(join(tmpdir(), 'gheymat-stt-'));

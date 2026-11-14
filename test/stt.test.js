@@ -172,3 +172,16 @@ test('audioCtxArgs: پنجرهٔ کوتاه فقط برای صدای کوتاه'
   assert.deepEqual(audioCtxArgs(await sttConfig({ WHISPER_AUDIO_CTX: '0' }), 3), []);
   assert.deepEqual(audioCtxArgs(await sttConfig({ WHISPER_AUDIO_CTX: '768' }), 20), ['-ac', '768']);
 });
+
+test('whisper با «Illegal instruction»: تشخیص گفتار سرور خاموش می‌شود (به جای خطا در هر درخواست)', async () => {
+  const { _resetDisabled } = await import('../src/stt.js');
+  const sigill = join(dir, 'whisper-sigill');
+  await writeFile(sigill, "#!/usr/bin/env node\nprocess.kill(process.pid, 'SIGILL');\n");
+  await chmod(sigill, 0o755);
+  const c = await sttConfig({ WHISPER_BIN: sigill, WHISPER_MODEL: MODEL });
+  await assert.rejects(transcribe(makeWav(1), c), (e) => e.status === 503 && /Illegal instruction/.test(e.message));
+  assert.equal((await sttStatus(c)).available, false);
+  assert.match((await sttStatus(c)).disabledReason, /Illegal instruction/);
+  _resetDisabled();
+  assert.equal((await sttStatus(c)).available, true);
+});

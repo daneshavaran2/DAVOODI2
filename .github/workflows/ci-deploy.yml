@@ -1,0 +1,51 @@
+# آزمون‌ها روی هر Pull Request؛ استقرار خودکار روی لیارا با هر push به main.
+# برای استقرار، در تنظیمات مخزن گیت‌هاب:
+#   Secrets → LIARA_API_TOKEN  (کلید API از پنل لیارا)
+#   Variables → LIARA_APP_NAME (اختیاری؛ اگر نام برنامه در لیارا با liara.json فرق دارد)
+name: test-and-deploy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      LIARA_API_TOKEN: ${{ secrets.LIARA_API_TOKEN }}
+      LIARA_APP_NAME: ${{ vars.LIARA_APP_NAME }}
+    steps:
+      - name: Liara token missing
+        if: env.LIARA_API_TOKEN == ''
+        run: echo "::notice::LIARA_API_TOKEN is not set; skipping deployment (see README, section لیارا)."
+      - uses: actions/checkout@v4
+        if: env.LIARA_API_TOKEN != ''
+      - uses: actions/setup-node@v4
+        if: env.LIARA_API_TOKEN != ''
+        with:
+          node-version: 22
+      - name: Deploy to Liara
+        if: env.LIARA_API_TOKEN != ''
+        run: |
+          npm install -g @liara/cli@9
+          liara deploy --api-token="$LIARA_API_TOKEN" --no-app-logs ${LIARA_APP_NAME:+--app="$LIARA_APP_NAME"}
