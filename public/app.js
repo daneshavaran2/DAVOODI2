@@ -1,4 +1,4 @@
-// رابط کاربری: تشخیص گفتار فارسی در مرورگر، فراخوانی /api/price و نمایش نتیجه.
+// رابط کاربری: ضبط صدا و تشخیص گفتار (روی سرور یا در مرورگر)، فراخوانی /api/price و نمایش نتیجه.
 
 const $ = (s) => document.querySelector(s);
 const micBtn = $('#micBtn');
@@ -40,14 +40,17 @@ function short(n) {
 const km = (v) => (v === 0 ? 'صفر کیلومتر' : Number.isFinite(v) ? `${nf.format(v)} کیلومتر` : '');
 const yearLabel = (k) => (k === 'new' ? 'صفر کیلومتر' : `مدل ${fa(k)}`);
 
+
 // ---------------------------------------------------------------- تنظیمات
 
-let config = { demo: false, cities: {} };
-fetch('/api/config')
+let config = { demo: false, cities: {}, stt: { server: false } };
+const configReady = fetch('/api/config')
   .then((r) => r.json())
   .then((c) => {
     config = c;
-    $('#demoBanner').hidden = !c.demo;
+    const banner = $('#demoBanner');
+    banner.hidden = !c.demo;
+    if (c.stt?.demo) banner.textContent += ' تشخیص گفتار هم نمایشی است: هر چه بگویید، یک جملهٔ نمونه برمی‌گردد.';
     for (const [id, name] of Object.entries(c.cities || {})) {
       const o = document.createElement('option');
       o.value = id;
@@ -59,7 +62,8 @@ fetch('/api/config')
       if (saved && [...citySel.options].some((o) => o.value === saved)) citySel.value = saved;
     } catch {}
   })
-  .catch(() => {});
+  .catch(() => {})
+  .finally(setupVoice);
 
 citySel.addEventListener('change', () => {
   try {
@@ -68,10 +72,15 @@ citySel.addEventListener('change', () => {
 });
 
 // ---------------------------------------------------------------- تشخیص گفتار
+// حالت «server»: صدا ضبط و به /api/transcribe فرستاده می‌شود (whisper روی سرور؛ همهٔ مرورگرها).
+// حالت «browser»: اگر whisper روی سرور نصب نباشد، تشخیص گفتار خود مرورگر (کروم/اج).
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null;
+let voiceMode = null;
+let rec = null; // browser mode
+let recording = null; // server mode
 let listening = false;
+let busy = false;
 
 function setStatus(text, isError = false) {
   micStatus.textContent = text;
@@ -83,7 +92,96 @@ function setListening(on) {
   micBtn.classList.toggle('listening', on);
   micBtn.setAttribute('aria-pressed', String(on));
   micLabel.textContent = on ? 'گوش می‌دهم…' : 'بگویید';
+  if (!on) micBtn.style.setProperty('--level', '0');
 }
+
+function setBusy(on) {
+  busy = on;
+  micBtn.classList.toggle('busy', on);
+  micLabel.textContent = on ? 'صبر کنید…' : 'بگویید';
+}
+
+function disableMic(text, isError = false) {
+  micBtn.disabled = true;
+  setStatus(text, isError);
+}
+
+function setupVoice() {
+  const serverStt = !!config.stt?.server;
+  if (serverStt && navigator.mediaDevices?.getUserMedia && (window.AudioContext || window.webkitAudioContext)) {
+    voiceMode = 'server';
+  } else if (SR) {
+    voiceMode = 'browser';
+  } else if (!window.isSecureContext) {
+    return disableMic('برای استفاده از میکروفون، سایت باید با HTTPS باز شود. فعلاً می‌توانید تایپ کنید.', true);
+  } else {
+    return disableMic('این مرورگر از ضبط صدا پشتیبانی نمی‌کند. می‌توانید نام خودرو را تایپ کنید.');
+  }
+  if (!window.isSecureContext) {
+    disableMic('برای استفاده از میکروفون، سایت باید با HTTPS باز شود. فعلاً می‌توانید تایپ کنید.', true);
+  }
+}
+
+function heard(text) {
+  input.value = text;
+  setStatus(`شنیدم: «${text}»`);
+  search(text);
+}
+
+// ---------- حالت server
+
+function micErrorMessage(e) {
+  switch (e?.name) {
+    case 'NotAllowedError':
+    case 'SecurityError':
+      return 'اجازهٔ استفاده از میکروفون داده نشد. از تنظیمات مرورگر (آیکون قفل کنار نشانی) اجازه دهید.';
+    case 'NotFoundError':
+    case 'OverconstrainedError':
+      return 'میکروفونی پیدا نشد.';
+    case 'NotReadableError':
+      return 'میکروفون در دست برنامهٔ دیگری است.';
+    default:
+      return 'شروع ضبط صدا ممکن نشد؛ دوباره امتحان کنید.';
+  }
+}
+
+async function startServerVoice() {
+  const { startRecording } = await import('/recorder.js');
+  setListening(true);
+  setStatus('بگویید… بعد از تمام شدن جمله، خودش متوجه می‌شود.');
+  try {
+    recording = await startRecording({
+      onLevel: (l) => micBtn.style.setProperty('--level', l.toFixed(2)),
+      onSpeech: () => setStatus('در حال شنیدن… (برای پایان دوباره بزنید یا مکث کنید)'),
+    });
+  } catch (e) {
+    setListening(false);
+    setStatus(micErrorMessage(e), true);
+    return;
+  }
+  const { wav, hadSpeech } = await recording.done;
+  recording = null;
+  setListening(false);
+  if (!hadSpeech) {
+    setStatus('صدایی شنیده نشد؛ دوباره روی میکروفون بزنید و کمی بلندتر بگویید.', true);
+    return;
+  }
+  setBusy(true);
+  setStatus('در حال تبدیل گفتار به متن…');
+  try {
+    const res = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `خطای سرور (${res.status})`);
+    if (!data.text) setStatus('متوجه نشدم؛ لطفاً دوباره و شمرده‌تر بگویید.', true);
+    else heard(data.text);
+  } catch (e) {
+    setStatus(e.message || 'تبدیل گفتار به متن ممکن نشد.', true);
+  } finally {
+    setBusy(false);
+  }
+}
+
+// ---------- حالت browser
 
 const SPEECH_ERRORS = {
   'not-allowed': 'اجازهٔ استفاده از میکروفون داده نشد. از تنظیمات مرورگر اجازه دهید.',
@@ -95,15 +193,7 @@ const SPEECH_ERRORS = {
   'language-not-supported': 'این مرورگر تشخیص گفتار فارسی را پشتیبانی نمی‌کند. کروم را امتحان کنید یا تایپ کنید.',
 };
 
-if (!SR) {
-  micBtn.disabled = true;
-  setStatus('این مرورگر از تشخیص گفتار پشتیبانی نمی‌کند (کروم یا اج را امتحان کنید). می‌توانید تایپ کنید.');
-} else if (!window.isSecureContext) {
-  micBtn.disabled = true;
-  setStatus('برای استفاده از میکروفون، سایت باید با HTTPS باز شود. فعلاً می‌توانید تایپ کنید.', true);
-}
-
-function startListening() {
+function startBrowserVoice() {
   let finalText = '';
   let failed = false;
   rec = new SR();
@@ -132,12 +222,8 @@ function startListening() {
   rec.onend = () => {
     setListening(false);
     const text = finalText.trim() || input.value.trim();
-    if (text && !(failed && !finalText.trim())) {
-      setStatus(`شنیدم: «${text}»`);
-      search(text);
-    } else if (!failed) {
-      setStatus('چیزی شنیده نشد؛ دوباره امتحان کنید.', true);
-    }
+    if (text && !(failed && !finalText.trim())) heard(text);
+    else if (!failed) setStatus('چیزی شنیده نشد؛ دوباره امتحان کنید.', true);
   };
   try {
     rec.start();
@@ -146,10 +232,16 @@ function startListening() {
   }
 }
 
-micBtn.addEventListener('click', () => {
-  if (micBtn.disabled) return;
-  if (listening && rec) rec.stop();
-  else startListening();
+micBtn.addEventListener('click', async () => {
+  if (micBtn.disabled || busy) return;
+  if (listening) {
+    if (recording) recording.stop();
+    else if (rec) rec.stop();
+    return;
+  }
+  if (!voiceMode) await configReady;
+  if (voiceMode === 'server') startServerVoice();
+  else if (voiceMode === 'browser') startBrowserVoice();
 });
 
 // ---------------------------------------------------------------- خواندن نتیجه با صدا (اگر صدای فارسی باشد)

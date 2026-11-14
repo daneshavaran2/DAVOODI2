@@ -1,0 +1,157 @@
+// آزمون تشخیص گفتار روی سرور با یک whisper-cli جعلی (همان رابط خط فرمان، بدون مدل واقعی).
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { cleanTranscript, parseWav, sttConfig, sttStatus, transcribe, DEFAULT_PROMPT } from '../src/stt.js';
+
+function makeWav(seconds, { rate = 16000, channels = 1, bits = 16 } = {}) {
+  const samples = Math.round(seconds * rate) * channels;
+  const bytes = samples * (bits / 8);
+  const b = Buffer.alloc(44 + bytes);
+  b.write('RIFF', 0, 'ascii');
+  b.writeUInt32LE(36 + bytes, 4);
+  b.write('WAVE', 8, 'ascii');
+  b.write('fmt ', 12, 'ascii');
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20);
+  b.writeUInt16LE(channels, 22);
+  b.writeUInt32LE(rate, 24);
+  b.writeUInt32LE(rate * channels * (bits / 8), 28);
+  b.writeUInt16LE(channels * (bits / 8), 32);
+  b.writeUInt16LE(bits, 34);
+  b.write('data', 36, 'ascii');
+  b.writeUInt32LE(bytes, 40);
+  return b;
+}
+
+// whisper-cli جعلی: آرگومان‌ها را ثبت می‌کند و متن FAKE_TEXT را مثل whisper-cli -nt -np چاپ می‌کند
+const FAKE = `#!/usr/bin/env node
+const fs = require('fs');
+const a = process.argv.slice(2);
+const val = (f) => a[a.indexOf(f) + 1];
+if (process.env.FAKE_LOG) fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({ args: a, wavExists: fs.existsSync(val('-f')) }) + '\\n');
+const out = () => {
+  if (process.env.FAKE_EXIT) { process.stderr.write('error: failed to read model\\n'); process.exit(Number(process.env.FAKE_EXIT)); }
+  process.stdout.write(process.env.FAKE_TEXT ?? ' پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰\\n');
+};
+const ms = Number(process.env.FAKE_SLEEP || 0);
+ms ? setTimeout(out, ms) : out();
+`;
+
+const dir = await mkdtemp(join(tmpdir(), 'stt-test-'));
+const BIN = join(dir, 'whisper-cli');
+const MODEL = join(dir, 'ggml-small.bin');
+const LOG = join(dir, 'log.jsonl');
+await writeFile(BIN, FAKE);
+await chmod(BIN, 0o755);
+await writeFile(MODEL, 'not a real model');
+
+const cfg = (over = {}) => sttConfig({ WHISPER_BIN: BIN, WHISPER_MODEL: MODEL, WHISPER_THREADS: '2', ...over });
+
+function resetFake() {
+  for (const k of ['FAKE_TEXT', 'FAKE_EXIT', 'FAKE_SLEEP']) delete process.env[k];
+  process.env.FAKE_LOG = LOG;
+}
+
+test('parseWav: فقط WAV ۱۶kHz تک‌کاناله ۱۶ بیتی', () => {
+  const w = parseWav(makeWav(2));
+  assert.equal(w.sampleRate, 16000);
+  assert.equal(w.channels, 1);
+  assert.equal(w.seconds, 2);
+  assert.throws(() => parseWav(Buffer.from('hello world, this is not a wav file at all......')), /WAV/);
+  assert.throws(() => parseWav(makeWav(1, { channels: 2 })), /تک‌کاناله/);
+  assert.throws(() => parseWav(makeWav(1, { rate: 44100 })), /۱۶ کیلوهرتز/);
+  assert.throws(() => parseWav(makeWav(1, { bits: 8 })), /۱۶ بیتی/);
+  assert.throws(() => parseWav(Buffer.alloc(10)), /خالی|ناقص/);
+});
+
+test('cleanTranscript: حذف برچسب‌ها و متن‌های ساختگی Whisper', () => {
+  assert.equal(cleanTranscript(' پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰.\n'), 'پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰');
+  assert.equal(cleanTranscript('[BLANK_AUDIO]'), '');
+  assert.equal(cleanTranscript('(موسیقی) پراید ۱۳۱'), 'پراید ۱۳۱');
+  assert.equal(cleanTranscript('زیرنویس توسط امیر'), '');
+  assert.equal(cleanTranscript('Thank you.'), '');
+  assert.equal(cleanTranscript('سمند ال ایکس، دنا پلاس، تیبا، ساینا', DEFAULT_PROMPT), '', 'تکرار پرامپت');
+  assert.equal(cleanTranscript('دنا پلاس', DEFAULT_PROMPT), 'دنا پلاس', 'جملهٔ کوتاه واقعی حذف نمی‌شود');
+});
+
+test('sttStatus: وقتی whisper نصب نیست', async () => {
+  const s = await sttStatus(await sttConfig({ WHISPER_BIN: join(dir, 'nope'), WHISPER_MODEL: MODEL }));
+  assert.equal(s.available, false);
+  assert.equal((await sttStatus(await cfg())).available, true);
+});
+
+test('transcribe: آرگومان‌های whisper-cli، متن تمیز و پاک شدن فایل موقت', async () => {
+  resetFake();
+  await writeFile(LOG, '');
+  const r = await transcribe(makeWav(1.5), await cfg());
+  assert.equal(r.text, 'پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰');
+  assert.equal(r.seconds, 1.5);
+  const call = JSON.parse((await readFile(LOG, 'utf8')).trim().split('\n').pop());
+  const a = call.args;
+  assert.equal(a[a.indexOf('-l') + 1], 'fa');
+  assert.equal(a[a.indexOf('-m') + 1], MODEL);
+  assert.equal(a[a.indexOf('-t') + 1], '2');
+  assert.ok(a.includes('-nt') && a.includes('-np'));
+  assert.match(a[a.indexOf('--prompt') + 1], /پراید/);
+  assert.ok(call.wavExists, 'فایل WAV هنگام اجرا وجود داشت');
+  assert.equal(existsSync(a[a.indexOf('-f') + 1]), false, 'فایل موقت پاک شد');
+});
+
+test('transcribe: خطای whisper و صدای خیلی کوتاه یا بلند', async () => {
+  resetFake();
+  process.env.FAKE_EXIT = '3';
+  await assert.rejects(transcribe(makeWav(1), await cfg()), (e) => e.status === 500 && /failed to read model/.test(e.message));
+  resetFake();
+  await assert.rejects(transcribe(makeWav(0.1), await cfg()), (e) => e.status === 400);
+  await assert.rejects(transcribe(makeWav(31), await cfg()), (e) => e.status === 400);
+  await assert.rejects(
+    transcribe(makeWav(1), await cfg({ WHISPER_BIN: join(dir, 'missing') })),
+    (e) => e.status === 503,
+  );
+});
+
+test('transcribe: مهلت زمانی', async () => {
+  resetFake();
+  process.env.FAKE_SLEEP = '3000';
+  const t0 = Date.now();
+  await assert.rejects(transcribe(makeWav(1), await cfg({ WHISPER_TIMEOUT_MS: '300' })), (e) => e.status === 504);
+  assert.ok(Date.now() - t0 < 2000);
+});
+
+test('transcribe: صف — هم‌زمان فقط یک اجرا', async () => {
+  resetFake();
+  process.env.FAKE_SLEEP = '300';
+  const c = await cfg({ WHISPER_CONCURRENCY: '1' });
+  const t0 = Date.now();
+  const rs = await Promise.all([transcribe(makeWav(1), c), transcribe(makeWav(1), c)]);
+  assert.ok(Date.now() - t0 >= 600, 'دو اجرا پشت سر هم');
+  assert.ok(rs.every((r) => r.text));
+});
+
+test('API: POST /api/transcribe و /api/config', async (t) => {
+  resetFake();
+  process.env.WHISPER_BIN = BIN;
+  process.env.WHISPER_MODEL = MODEL;
+  const { server } = await import('../server.js');
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  const cfgRes = await (await fetch(`${base}/api/config`)).json();
+  assert.equal(cfgRes.stt.server, true);
+  assert.equal(cfgRes.stt.model, 'ggml-small.bin');
+
+  const ok = await fetch(`${base}/api/transcribe`, { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: makeWav(1.2) });
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).text, 'پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰');
+
+  assert.equal((await fetch(`${base}/api/transcribe`)).status, 405);
+  const bad = await fetch(`${base}/api/transcribe`, { method: 'POST', body: Buffer.from('x'.repeat(100)) });
+  assert.equal(bad.status, 400);
+  const big = await fetch(`${base}/api/transcribe`, { method: 'POST', body: makeWav(40) }).catch(() => null);
+  assert.ok(!big || big.status === 413);
+});

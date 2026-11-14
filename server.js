@@ -1,5 +1,6 @@
 // سرور وب: صفحهٔ برنامه (public/) و API قیمت.
 //   GET /api/price?q=پژو 206 مدل 1400&city=all|1|2...
+//   POST /api/transcribe   صدای WAV (۱۶kHz تک‌کاناله) ← متن فارسی با whisper.cpp روی همین سرور
 //   GET /api/diagnose      وضعیت دسترسی به سه سایت
 //   GET /api/health
 // اجرا: node server.js   (پورت با PORT، حالت نمایشی با DEMO=1)
@@ -12,6 +13,7 @@ import { setFetch } from './src/http.js';
 import { lookupAll, SOURCES } from './src/lookup.js';
 import { CITIES, DEFAULT_CITIES } from './src/sources/divar.js';
 import { diagnose } from './src/diagnose.js';
+import { LIMITS, parseWav, SttError, sttStatus, transcribe } from './src/stt.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -67,6 +69,31 @@ function allowed(ip) {
   return true;
 }
 
+function readBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) {
+        reject(new SttError('فایل صوتی بیش از حد بزرگ است.', 413));
+        req.destroy();
+      } else chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+// در حالت نمایشی بدون whisper، یک جملهٔ ثابت برمی‌گردد تا مسیر ضبط صدا قابل آزمایش باشد
+const DEMO_TRANSCRIPT = 'پژو دویست و شش تیپ دو مدل هزار و چهارصد';
+
+async function sttInfo() {
+  const s = await sttStatus();
+  if (s.available) return { server: true, model: s.modelName };
+  return DEMO ? { server: true, model: 'demo', demo: true } : { server: false };
+}
+
 function clientIp(req) {
   const fwd = process.env.TRUST_PROXY === '1' ? String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() : '';
   return fwd || req.socket.remoteAddress || 'unknown';
@@ -99,14 +126,34 @@ async function serveStatic(req, res, pathname) {
 export const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
+    if (url.pathname === '/api/transcribe') {
+      if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' }, { Allow: 'POST' });
+      if (!allowed(clientIp(req))) {
+        return send(res, 429, { error: 'تعداد درخواست‌ها زیاد است؛ یک دقیقه صبر کنید.' }, { 'Retry-After': '60' });
+      }
+      try {
+        const wav = await readBody(req, LIMITS.maxBytes);
+        const stt = await sttInfo();
+        if (stt.demo) {
+          const info = parseWav(wav);
+          return send(res, 200, { text: DEMO_TRANSCRIPT, ms: 0, seconds: info.seconds, demo: true });
+        }
+        const r = await transcribe(wav);
+        return send(res, 200, { text: r.text, ms: r.ms, seconds: r.seconds }, { 'Cache-Control': 'no-store' });
+      } catch (e) {
+        if (e instanceof SttError) return send(res, e.status, { error: e.message });
+        throw e;
+      }
+    }
+
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Method not allowed' });
 
     if (url.pathname === '/api/health') {
-      return send(res, 200, { ok: true, demo: DEMO, sources: SOURCES.map((s) => s.info) });
+      return send(res, 200, { ok: true, demo: DEMO, stt: await sttInfo(), sources: SOURCES.map((s) => s.info) });
     }
 
     if (url.pathname === '/api/config') {
-      return send(res, 200, { demo: DEMO, cities: CITIES, defaultCities: DEFAULT_CITIES });
+      return send(res, 200, { demo: DEMO, stt: await sttInfo(), cities: CITIES, defaultCities: DEFAULT_CITIES });
     }
 
     if (url.pathname === '/api/price') {
@@ -135,7 +182,15 @@ export const server = http.createServer(async (req, res) => {
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
-  server.listen(PORT, HOST, () => {
+  server.listen(PORT, HOST, async () => {
     console.log(`قیمت‌یاب خودرو آماده است: http://localhost:${PORT}${DEMO ? '  (حالت نمایشی — قیمت‌ها واقعی نیستند)' : ''}`);
+    const s = await sttStatus();
+    console.log(
+      s.available
+        ? `تشخیص گفتار روی سرور: فعال (${s.modelName})`
+        : DEMO
+          ? 'تشخیص گفتار روی سرور: نمایشی (whisper نصب نیست؛ همیشه یک جملهٔ نمونه برمی‌گردد)'
+          : 'تشخیص گفتار روی سرور: نصب نیست (bash scripts/setup-whisper.sh) — فعلاً تشخیص گفتار مرورگر استفاده می‌شود.',
+    );
   });
 }
