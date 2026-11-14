@@ -12,7 +12,7 @@
     "start": "node server.js",
     "demo": "DEMO=1 node server.js",
     "diagnose": "node scripts/diagnose.js",
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "license": "MIT"
 }

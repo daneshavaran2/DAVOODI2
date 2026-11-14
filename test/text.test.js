@@ -82,3 +82,29 @@ test('parseToman و parseKm', () => {
   assert.equal(parseKm('کارکرد صفر'), 0);
   assert.equal(parseKm(''), null);
 });
+
+test('شکل‌های محاوره‌ای و آوایی که تشخیص گفتار می‌نویسد', () => {
+  const p = (s) => parseQuery(s, NOW);
+  assert.deepEqual([p('رانا پلاس مدل هزار و چار سد').carText, p('رانا پلاس مدل هزار و چار سد').year.value], ['رانا پلاس', 1400]);
+  assert.equal(p('پراید سد و سی و یک مدل نوود و هشت').carText, 'پراید 131');
+  assert.equal(p('پراید سد و سی و یک مدل نوود و هشت').year.value, 1398);
+  assert.equal(p('پژو پارس مدل نوادوشیش').year.value, 1396);
+  assert.equal(p('پراید صد و سی و یه').carText, 'پراید 131');
+  assert.equal(p('پژو چارصد و پنج').carText, 'پژو 405');
+  assert.equal(p('سمند مودل 1402').year.value, 1402);
+  assert.equal(p('کیا سراتو مو دل 2015').year.value, 2015);
+  assert.equal(p('چری تیگو هف پرو').carText, 'چری تیگو 7 پرو');
+});
+
+test('خروجی انگلیسی و حروف اردو', () => {
+  const r = parseQuery('Rana Plus Model 1400', NOW);
+  assert.equal(r.carText, 'رانا پلاس');
+  assert.equal(r.year.value, 1400);
+  assert.equal(parseQuery('Peugeot 405GLX', NOW).carText, 'پژو 405 glx');
+  assert.equal(parseQuery('شاہین مدل 1403', NOW).carText, 'شاهین');
+  assert.equal(parseQuery('ساینا ایس', NOW).carText, 'ساینا اس');
+});
+
+test('«یه» بیرون از عدد حرف تعریف است', () => {
+  assert.equal(parseQuery('قیمت یه پژو 206', NOW).carText, 'پژو 206');
+});

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # نصب تشخیص گفتار روی سرور: ساخت whisper.cpp و دانلود مدل Whisper.
 #
-#   bash scripts/setup-whisper.sh              # مدل پیش‌فرض: small-q8_0 (حدود ۲۶۰ مگابایت)
-#   bash scripts/setup-whisper.sh medium-q5_0  # دقیق‌تر برای فارسی، کندتر (حدود ۵۴۰ مگابایت)
+#   bash scripts/setup-whisper.sh              # مدل پیش‌فرض: large-v3-turbo-q8_0 (حدود ۸۷۰ مگابایت)
+#   bash scripts/setup-whisper.sh small-q8_0   # برای سرور ضعیف (۲۶۰ مگابایت)؛ برای فارسی دقت کمی دارد
 #
 # پیش‌نیاز (اوبونتو/دبیان):  sudo apt install -y build-essential cmake git curl
 #
@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-MODEL="${1:-${WHISPER_MODEL_NAME:-small-q8_0}}"
+MODEL="${1:-${WHISPER_MODEL_NAME:-large-v3-turbo-q8_0}}"
 VERSION="${WHISPER_CPP_VERSION:-v1.9.5}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/whisper"
 SRC="$ROOT/whisper.cpp"
@@ -48,7 +48,13 @@ if [ -s "$FILE" ]; then
 else
   URL="${WHISPER_MODEL_URL:-https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$MODEL.bin}"
   echo "دانلود مدل $MODEL از $URL ..."
-  curl -L --fail --retry 3 --progress-bar -o "$FILE.part" "$URL"
+  if ! curl -L --fail --retry 3 --progress-bar -o "$FILE.part" "$URL"; then
+    rm -f "$FILE.part"
+    echo >&2
+    echo "دانلود مدل ناموفق بود. فایل ggml-$MODEL.bin را جای دیگری دانلود کنید و در $ROOT/models/ بگذارید،" >&2
+    echo "یا نشانی دیگری بدهید:  WHISPER_MODEL_URL=<نشانی> bash scripts/setup-whisper.sh $MODEL" >&2
+    exit 1
+  fi
   mv "$FILE.part" "$FILE"
 fi
 

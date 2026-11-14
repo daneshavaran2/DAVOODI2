@@ -55,3 +55,14 @@ test('حروف لاتین گفته‌شده: «جی ال ایکس» = GLX و «�
   assert.equal(pickBest('پژو 405 اس ال ایکس', items, (i) => i.name).item.name, 'پژو 405 SLX موتور XU7');
   assert.equal(resolveVehicle(vehicles, 'پژو 206 اس دی وی 8').value, 'peugeot,206sd,v8');
 });
+
+test('تطبیق آوایی: «پجو» = «پژو»، «تیب» = «تیپ»، «کویک» = «کوییک»', () => {
+  assert.ok(tokenSim('پجو', 'پژو') >= 0.7);
+  assert.ok(tokenSim('پیجو', 'پژو') >= 0.7);
+  assert.ok(tokenSim('تیب', 'تیپ') >= 0.7);
+  assert.ok(tokenSim('کویک', 'کوییک') >= 0.7);
+  assert.ok(tokenSim('مودل', 'مدل') >= 0.7);
+  assert.equal(tokenSim('سمند', 'پراید'), 0);
+  assert.equal(resolveVehicle(vehicles, 'پجو 206 تیب 2').value, 'peugeot,206ir,type2');
+  assert.equal(pickBest('پژو 405 جی الیکس', [{ name: 'پژو 405 GLI' }, { name: 'پژو 405 GLX' }], (i) => i.name).item.name, 'پژو 405 GLX');
+});

@@ -74,7 +74,7 @@ test('cleanTranscript: حذف برچسب‌ها و متن‌های ساختگی 
   assert.equal(cleanTranscript('(موسیقی) پراید ۱۳۱'), 'پراید ۱۳۱');
   assert.equal(cleanTranscript('زیرنویس توسط امیر'), '');
   assert.equal(cleanTranscript('Thank you.'), '');
-  assert.equal(cleanTranscript('سمند ال ایکس، دنا پلاس، تیبا، ساینا', DEFAULT_PROMPT), '', 'تکرار پرامپت');
+  assert.equal(cleanTranscript('سمند، دنا، تیبا، ساینا، کوییک، شاهین', DEFAULT_PROMPT), '', 'تکرار پرامپت');
   assert.equal(cleanTranscript('دنا پلاس', DEFAULT_PROMPT), 'دنا پلاس', 'جملهٔ کوتاه واقعی حذف نمی‌شود');
 });
 
@@ -154,4 +154,21 @@ test('API: POST /api/transcribe و /api/config', async (t) => {
   assert.equal(bad.status, 400);
   const big = await fetch(`${base}/api/transcribe`, { method: 'POST', body: makeWav(40) }).catch(() => null);
   assert.ok(!big || big.status === 413);
+});
+
+test('dedupeRepeats: تکرار جمله (خطای رایج Whisper)', async () => {
+  const { dedupeRepeats } = await import('../src/stt.js');
+  assert.equal(dedupeRepeats('رانا پلاس مدل 1400 رانا پلاس مدل 1400'), 'رانا پلاس مدل 1400');
+  assert.equal(dedupeRepeats('سمند ال ایکس، مدل 1402 سمند ال ایکس، مدل 1402 سمند ال ایکس،'), 'سمند ال ایکس، مدل 1402');
+  assert.equal(dedupeRepeats('پژو 206 تیپ 2'), 'پژو 206 تیپ 2');
+  assert.equal(cleanTranscript('آیما اس حف، آیما اس حف،'), 'آیما اس حف');
+});
+
+test('audioCtxArgs: پنجرهٔ کوتاه فقط برای صدای کوتاه', async () => {
+  const { audioCtxArgs } = await import('../src/stt.js');
+  const auto = await sttConfig({});
+  assert.deepEqual(audioCtxArgs(auto, 3), ['-ac', '512']);
+  assert.deepEqual(audioCtxArgs(auto, 12), []);
+  assert.deepEqual(audioCtxArgs(await sttConfig({ WHISPER_AUDIO_CTX: '0' }), 3), []);
+  assert.deepEqual(audioCtxArgs(await sttConfig({ WHISPER_AUDIO_CTX: '768' }), 20), ['-ac', '768']);
 });

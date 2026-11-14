@@ -7,7 +7,9 @@ import { normalize } from './text.js';
 // تشخیص گفتار، تیپ‌های لاتین را با حروف فارسی می‌نویسد («جی ال ایکس» به جای GLX).
 // هر دو طرف (پرسش و نام سایت) به یک شکل لاتین برگردانده می‌شوند.
 const SPOKEN_LATIN = [
-  ['جی ال ایکس', 'glx'], ['جی ال ای', 'gli'], ['اس ال ایکس', 'slx'], ['ای ال ایکس', 'elx'], ['ال ایکس', 'lx'],
+  ['جی ال ایکس', 'glx'], ['جی الیکس', 'glx'], ['جیل ایکس', 'glx'], ['جی ال ای', 'gli'],
+  ['اس ال ایکس', 'slx'], ['اس الیکس', 'slx'], ['ای ال ایکس', 'elx'], ['ای الیکس', 'elx'],
+  ['ال ایکس', 'lx'], ['الیکس', 'lx'],
   ['اس دی', 'sd'], ['جی تی', 'gt'], ['اس ای', 'se'], ['سی وی تی', 'cvt'], ['ام وی ام', 'mvm'],
   ['ای اف (\\d+)', 'ef$2'], ['تی یو (\\d+)', 'tu$2'], ['ایکس یو (\\d+)', 'xu$2'], ['ال (\\d+)', 'l$2'],
   ['ایکس (\\d+)', 'x$2'], ['وی (\\d+)', 'v$2'], ['اچ (\\d+)', 'h$2'],
@@ -39,6 +41,16 @@ function levenshtein(a, b) {
   return prev[b.length];
 }
 
+// کلید آوایی: حروف هم‌صدا یکی می‌شوند (س/ص/ث، ز/ذ/ض/ظ، ت/ط/د، ...)، حروف صدادار میانی حذف می‌شوند.
+// تشخیص گفتار اغلب کلمه را همان‌طور که شنیده می‌نویسد: «پجو» یا «پیجو» به جای «پژو»، «تیب» به جای «تیپ».
+const PHON = { ث: 'س', ص: 'س', ذ: 'ز', ض: 'ز', ظ: 'ز', ط: 'ت', د: 'ت', ح: 'ه', غ: 'ق', ژ: 'ج', پ: 'ب', ع: 'ا' };
+
+export function phonetic(w) {
+  if (/[a-z0-9]/.test(w)) return w;
+  const s = [...w].map((c) => PHON[c] || c).join('');
+  return (s[0] + s.slice(1).replace(/[اوی]/g, '')).replace(/ه$/, '').replace(/(.)\1+/g, '$1');
+}
+
 /** شباهت دو کلمه بین ۰ و ۱. */
 export function tokenSim(a, b) {
   if (a === b) return 1;
@@ -47,6 +59,11 @@ export function tokenSim(a, b) {
   if (Math.min(a.length, b.length) >= 4) {
     const r = 1 - levenshtein(a, b) / Math.max(a.length, b.length);
     if (r >= 0.75) return 0.7;
+  }
+  if (Math.min(a.length, b.length) >= 3) {
+    const pa = phonetic(a);
+    const pb = phonetic(b);
+    if (pa.length >= 2 && pa === pb) return 0.75;
   }
   return 0;
 }

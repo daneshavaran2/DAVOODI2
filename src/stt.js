@@ -12,15 +12,21 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('../whisper/', import.meta.url));
 
 // پرامپت اولیه: Whisper نام‌های خاص را بهتر می‌شنود اگر پیش‌تر در «متن قبلی» آمده باشند.
+// فقط نام‌ها، بدون عدد: در آزمایش، عدد در پرامپت باعث می‌شد Whisper عددهای اشتباه بنویسد.
 export const DEFAULT_PROMPT =
-  'قیمت پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰. پراید ۱۳۱ مدل ۹۸. سمند ال ایکس، دنا پلاس، تیبا، ساینا، کوییک، شاهین، ' +
-  'تارا، رانا، ری‌را، آریسان، هایما، جک، چری تیگو، فونیکس، ام‌وی‌ام، کیا سراتو، هیوندای، تویوتا کمری، رنو تندر.';
+  'پژو، پراید، سمند، دنا، تیبا، ساینا، کوییک، شاهین، تارا، رانا، هایما، چری تیگو، تویوتا کمری، کیا سراتو، مدل.';
 
-// اگر WHISPER_MODEL تعیین نشده باشد، بزرگ‌ترین مدل موجود در whisper/models انتخاب می‌شود.
+// اگر WHISPER_MODEL تعیین نشده باشد، بهترین مدل موجود در whisper/models انتخاب می‌شود.
+// q8_0 روی CPU چند برابر سریع‌تر از q5_0 است (در آزمایش: ۲٫۷ در برابر ۷٫۷ ثانیه).
 const MODEL_PREFERENCE = [
-  'large-v3-turbo-q8_0', 'large-v3-turbo-q5_0', 'large-v3-turbo', 'medium-q8_0', 'medium-q5_0', 'medium',
-  'small', 'small-q8_0', 'small-q5_1', 'base', 'base-q8_0', 'base-q5_1', 'tiny', 'tiny-q8_0', 'tiny-q5_1',
+  'large-v3-turbo-q8_0', 'large-v3-turbo', 'large-v3-turbo-q5_0', 'medium-q8_0', 'medium', 'medium-q5_0',
+  'small-q8_0', 'small', 'small-q5_1', 'base-q8_0', 'base', 'base-q5_1', 'tiny-q8_0', 'tiny', 'tiny-q5_1',
 ];
+
+// پنجرهٔ صوتی کوتاه‌تر (512 ≈ ۱۰ ثانیه به جای ۳۰) رمزگذار را حدود ۳ برابر سریع‌تر می‌کند؛
+// فقط برای صداهای کوتاه به کار می‌رود.
+const SHORT_AUDIO_CTX = 512;
+const SHORT_AUDIO_MAX_SECONDS = 9;
 
 export const LIMITS = { minSeconds: 0.3, maxSeconds: 30, maxBytes: 16000 * 2 * 30 + 1024 };
 
@@ -40,8 +46,16 @@ export async function sttConfig(env = process.env) {
     prompt: env.WHISPER_PROMPT ?? DEFAULT_PROMPT,
     concurrency: Math.max(1, Number(env.WHISPER_CONCURRENCY) || 1),
     timeoutMs: Number(env.WHISPER_TIMEOUT_MS) || 60_000,
+    // auto: برای صدای کوتاه -ac 512؛ 0: همیشه پنجرهٔ کامل؛ عدد: همان مقدار
+    audioCtx: env.WHISPER_AUDIO_CTX ?? 'auto',
     extraArgs: (env.WHISPER_ARGS || '').split(/\s+/).filter(Boolean),
   };
+}
+
+export function audioCtxArgs(cfg, seconds) {
+  if (cfg.audioCtx === 'auto') return seconds <= SHORT_AUDIO_MAX_SECONDS ? ['-ac', String(SHORT_AUDIO_CTX)] : [];
+  const n = Number(cfg.audioCtx);
+  return n > 0 ? ['-ac', String(n)] : [];
 }
 
 /** آیا whisper-cli و فایل مدل روی سرور هست؟ */
@@ -97,6 +111,18 @@ export function parseWav(buf) {
 // Whisper روی سکوت یا نویز گاهی جمله‌های ساختگی تولید می‌کند (مثلاً «زیرنویس توسط ...»).
 const HALLUCINATIONS = /زیرنویس|زير نويس|subtitle|amara|thank(s| you)|ترجمه|مترجم|ادامه دارد|موسیقی|music|سابسکرایب|subscribe/i;
 
+/** «رانا پلاس مدل 1400 رانا پلاس مدل 1400» ← «رانا پلاس مدل 1400» (تکرار جمله، خطای رایج Whisper). */
+export function dedupeRepeats(text) {
+  const tok = text.split(' ');
+  const key = tok.map((t) => t.replace(/[.،,؟?!؛:]/g, ''));
+  for (let p = 1; p * 2 <= tok.length; p++) {
+    let same = true;
+    for (let i = p; i < tok.length && same; i++) same = key[i] === key[i % p];
+    if (same) return tok.slice(0, p).join(' ').replace(/[.،,\s]+$/, '');
+  }
+  return text;
+}
+
 export function cleanTranscript(text, prompt = '') {
   let t = String(text || '')
     .replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*|♪+/g, ' ')
@@ -104,6 +130,7 @@ export function cleanTranscript(text, prompt = '') {
     .trim()
     .replace(/^[.،,؟?!\s-]+|[.،,\s-]+$/g, '');
   if (!t) return '';
+  t = dedupeRepeats(t);
   if (HALLUCINATIONS.test(t) && t.length < 80) return '';
   // تکرار خود پرامپت به جای شنیدن صدا
   if (prompt && t.length > 25 && prompt.includes(t)) return '';
@@ -171,7 +198,7 @@ export async function transcribe(wav, cfg) {
     await writeFile(file, wav);
     const args = ['-m', cfg.model, '-f', file, '-l', cfg.language, '-t', String(cfg.threads), '-nt', '-np', '-sns'];
     if (cfg.prompt) args.push('--prompt', cfg.prompt);
-    args.push(...cfg.extraArgs);
+    args.push(...audioCtxArgs(cfg, info.seconds), ...cfg.extraArgs);
     const raw = await run(cfg.bin, args, cfg.timeoutMs);
     return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms: Date.now() - t0, seconds: info.seconds };
   } finally {

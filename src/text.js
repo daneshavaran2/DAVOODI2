@@ -22,6 +22,13 @@ export function normalize(s) {
     .replace(/ة/g, 'ه')
     .replace(/ؤ/g, 'و')
     .replace(/[إأ]/g, 'ا')
+    // حروف اردو/عربی که Whisper گاهی می‌نویسد: «شاہین» ← «شاهین»
+    .replace(/[ہۂۃھۀ]/g, 'ه')
+    .replace(/ڈ/g, 'د')
+    .replace(/ڑ/g, 'ر')
+    .replace(/ٹ/g, 'ت')
+    .replace(/ں/g, 'ن')
+    .replace(/ڪ/g, 'ک')
     .replace(/[ً-ٰٟـ]/g, '') // اعراب و کشیده
     .replace(/[‌‍‎‏ ]/g, ' ') // نیم‌فاصله و نویسه‌های جهت
     .replace(/(\d)[,٬،٬](?=\d{3}(\D|$))/g, '$1') // جداکنندهٔ هزارگان
@@ -29,6 +36,7 @@ export function normalize(s) {
     // «پژو206» ← «پژو 206»؛ ولی کدهای لاتین مثل V8، TU5 و L90 یک کلمه می‌مانند
     .replace(/([؀-ۿ])(\d)/g, '$1 $2')
     .replace(/(\d)([؀-ۿ])/g, '$1 $2')
+    .replace(/(\d{3,})([a-zA-Z])/g, '$1 $2') // «405GLX» ← «405 GLX»
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
@@ -36,15 +44,17 @@ export function normalize(s) {
 
 // ---------------------------------------------------------------- عدد نوشتاری
 
-const UNITS = { یک: 1, دو: 2, سه: 3, چهار: 4, پنج: 5, شش: 6, شیش: 6, هفت: 7, هشت: 8, نه: 9 };
+// شامل شکل‌های محاوره‌ای و آوایی که تشخیص گفتار می‌نویسد (چار، سد، نوود، هف، ...)
+const UNITS = { یک: 1, دو: 2, سه: 3, چهار: 4, چار: 4, پنج: 5, شش: 6, شیش: 6, هفت: 7, هف: 7, هشت: 8, نه: 9 };
 const TEENS = {
-  ده: 10, یازده: 11, دوازده: 12, سیزده: 13, چهارده: 14, پانزده: 15, پونزده: 15,
+  ده: 10, یازده: 11, دوازده: 12, سیزده: 13, چهارده: 14, چارده: 14, پانزده: 15, پونزده: 15, پنزده: 15,
   شانزده: 16, شونزده: 16, هفده: 17, هیفده: 17, هجده: 18, هیجده: 18, نوزده: 19,
 };
-const TENS = { بیست: 20, سی: 30, چهل: 40, پنجاه: 50, شصت: 60, هفتاد: 70, هشتاد: 80, نود: 90 };
+const TENS = { بیست: 20, سی: 30, چهل: 40, پنجاه: 50, شصت: 60, هفتاد: 70, هشتاد: 80, نود: 90, نوود: 90, نواد: 90 };
 const HUNDREDS = {
-  صد: 100, یکصد: 100, دویست: 200, سیصد: 300, چهارصد: 400, پانصد: 500, پونصد: 500,
-  ششصد: 600, شیشصد: 600, هفتصد: 700, هشتصد: 800, نهصد: 900,
+  صد: 100, سد: 100, یکصد: 100, دویست: 200, دویس: 200, سیصد: 300, سیسد: 300, چهارصد: 400, چارصد: 400,
+  چارسد: 400, چهارسد: 400, پانصد: 500, پونصد: 500, پونسد: 500, ششصد: 600, شیشصد: 600, شیشسد: 600,
+  هفتصد: 700, هفصد: 700, هشتصد: 800, هشصد: 800, نهصد: 900,
 };
 const THOUSAND = 'هزار';
 
@@ -57,12 +67,42 @@ function wordValue(w) {
   return null;
 }
 
+/** «نوادو» ← «نواد و»، «نوادوشیش» ← «نواد و شیش»، «هزارو» ← «هزار و» (و چسبیده در گفتار). */
+function splitAttachedVa(tok) {
+  const out = [];
+  for (const t of tok) {
+    if (wordValue(t) || t.length < 3 || !t.includes('و')) {
+      out.push(t);
+      continue;
+    }
+    const parts = [];
+    let rest = t;
+    while (rest) {
+      let found = false;
+      for (let k = rest.length; k >= 1; k--) {
+        const head = rest.slice(0, k);
+        if (wordValue(head) && (rest.length === k || rest[k] === 'و')) {
+          parts.push(head);
+          if (rest.length > k) parts.push('و');
+          rest = rest.slice(k + 1);
+          found = true;
+          break;
+        }
+      }
+      if (!found) break;
+    }
+    if (!rest && parts.length > 1) out.push(...parts);
+    else out.push(t);
+  }
+  return out;
+}
+
 // پس از هر رتبه، کدام رتبه‌ها می‌توانند در همان عدد بیایند (دویست و شش، هزار و چهارصد، ...)
 const NEXT = { 5: [4, 3, 2, 1], 4: [3, 2, 1], 3: [1], 2: [], 1: [] };
 
 /** «پژو دویست و شش مدل نود و هشت» ← «پژو 206 مدل 98» (ورودی باید normalize شده باشد). */
 export function wordsToDigits(text) {
-  const tok = text.split(' ').filter(Boolean);
+  const tok = splitAttachedVa(text.split(' ').filter(Boolean));
   const out = [];
   let i = 0;
   while (i < tok.length) {
@@ -85,7 +125,8 @@ export function wordsToDigits(text) {
         k = j + 1;
         w = tok[k];
       }
-      const wv = w === undefined ? null : wordValue(w);
+      // «یه» فقط بعد از «و» در میان عدد یعنی ۱ («سی و یه»)؛ در جای دیگر حرف تعریف است
+      const wv = w === undefined ? null : wordValue(w) || (k > j && w === 'یه' ? { v: 1, rank: 1 } : null);
       if (!wv) break;
       if (wv.rank === 5) {
         // «هزار» ضرب‌کننده است: «هزار و چهارصد»، «دو هزار»
@@ -95,7 +136,7 @@ export function wordsToDigits(text) {
         cur = 0;
         lastRank = 5;
         lastUnit = null;
-      } else if (w === 'صد' && lastRank === 1 && lastUnit !== null) {
+      } else if ((w === 'صد' || w === 'سد') && lastRank === 1 && lastUnit !== null) {
         // «چهار صد» جدا نوشته شده
         cur += lastUnit * 99;
         lastRank = 4;
@@ -227,7 +268,17 @@ const STOPWORDS = new Set([
   'تومن', 'تومان', 'من', 'یک', 'دنبال', 'هستم', 'در', 'با', 'آیا', 'ایا', 'و',
 ]);
 
-const NEW_RE = '(^| )(کارکرد صفر|صفر کیلومتر|صفر|نو|آکبند|اکبند)(?= |$)';
+// شکل‌های آوایی «مدل» و نام‌هایی که تشخیص گفتار گاهی به انگلیسی می‌نویسد
+const ALIASES = {
+  مودل: 'مدل', موديل: 'مدل', مودیل: 'مدل', موذل: 'مدل', model: 'مدل', year: 'سال', ایس: 'اس',
+  peugeot: 'پژو', pejo: 'پژو', pride: 'پراید', samand: 'سمند', dena: 'دنا', tiba: 'تیبا', saina: 'ساینا',
+  quick: 'کوییک', shahin: 'شاهین', tara: 'تارا', rana: 'رانا', runna: 'رانا', haima: 'هایما', chery: 'چری',
+  tiggo: 'تیگو', toyota: 'تویوتا', camry: 'کمری', corolla: 'کرولا', kia: 'کیا', cerato: 'سراتو',
+  sportage: 'اسپورتیج', hyundai: 'هیوندای', renault: 'رنو', nissan: 'نیسان', mazda: 'مزدا', jac: 'جک',
+  plus: 'پلاس', pars: 'پارس', persia: 'پرشیا', soren: 'سورن', sarir: 'سریر',
+};
+
+const NEW_RE ='(^| )(کارکرد صفر|صفر کیلومتر|صفر|نو|آکبند|اکبند)(?= |$)';
 const USED_RE = '(^| )(کارکرده|کار کرده|دست دوم|دسته دوم|دست 2)(?= |$)';
 const NEW_WORDS = new RegExp(NEW_RE, 'g');
 const USED_WORDS = new RegExp(USED_RE, 'g');
@@ -240,6 +291,11 @@ const IS_USED = new RegExp(USED_RE);
  */
 export function parseQuery(raw, now = new Date()) {
   let text = normalize(raw);
+  text = text
+    .replace(/(^| )مو دل(?= |$)/g, '$1مدل')
+    .split(' ')
+    .map((t) => ALIASES[t] || t)
+    .join(' ');
   // «یک» در «قیمت یک پژو» حرف تعریف است، نه عدد
   text = text.replace(/(^| )(قیمت|یه|برای|از) یک /g, '$1$2 ').replace(/^یک /, '');
   text = wordsToDigits(text);
