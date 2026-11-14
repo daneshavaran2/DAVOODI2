@@ -2,7 +2,7 @@
 // همان API عمومی جستجو که وب‌سایت دیوار استفاده می‌کند.
 
 import { request, MINUTE } from '../http.js';
-import { isRelevant, tokens } from '../match.js';
+import { isNum, isRelevant, tokens, tokenSim } from '../match.js';
 import { extractYear, normalize, parseKm, parseToman, toFaDigits } from '../text.js';
 
 export const API = 'https://api.divar.ir';
@@ -80,9 +80,26 @@ function nextCursor(body) {
   return c;
 }
 
-export async function lookup(parsed, { cities = DEFAULT_CITIES } = {}) {
-  const qTok = tokens(parsed.carText);
-  const query = toFaDigits(parsed.carText);
+/**
+ * آیا عنوان آگهی دربارهٔ همین خودروی کامل است؟ همهٔ کلمه‌های نام (عددها دقیق) باید باشند
+ * (در نام‌های بلندِ تیپ، یک کلمهٔ غیرعددی می‌تواند نباشد)، و آگهی نباید مال مدل دقیق‌تری باشد
+ * (آگهی «پژو ۲۰۶ SD» در قیمت «پژو ۲۰۶» حساب نمی‌شود).
+ */
+export function matchesCanonical(canon, title) {
+  const tTok = tokens(title);
+  const nameTok = tokens(canon.title);
+  if (!nameTok.filter(isNum).every((n) => tTok.includes(n))) return false;
+  const missing = nameTok.filter((w) => !isNum(w) && !tTok.some((t) => tokenSim(w, t) >= 0.7)).length;
+  if (missing > (nameTok.length >= 4 ? 1 : 0)) return false;
+  return !(canon.moreSpecific || []).some((s) => tokens(s).every((w) => tTok.some((t) => tokenSim(w, t) >= 0.85)));
+}
+
+export async function lookup(parsed, { cities = DEFAULT_CITIES, canonical = null } = {}) {
+  // اگر نام کامل خودرو (از باما) معلوم است، با همان جستجو می‌شود؛ وگرنه با گفتهٔ کاربر
+  const canon = canonical && canonical.level !== 'brand' ? canonical : null;
+  const baseText = canon ? canon.title : parsed.carText;
+  const qTok = tokens(baseText);
+  const query = toFaDigits(baseText);
   const seen = new Set();
   const all = [];
   const run = async (q, pages) => {
@@ -102,7 +119,7 @@ export async function lookup(parsed, { cities = DEFAULT_CITIES } = {}) {
   };
 
   const keep = (r) =>
-    isRelevant(qTok, r.title) &&
+    (canon ? matchesCanonical(canon, r.title) : isRelevant(qTok, r.title)) &&
     !EXCLUDE.test(r.title) &&
     (r.price === null || r.price >= MIN_PRICE) &&
     (!parsed.year || r.year === parsed.year.value) &&
@@ -123,7 +140,7 @@ export async function lookup(parsed, { cities = DEFAULT_CITIES } = {}) {
   return {
     ...info,
     ok: true,
-    matched: { title: parsed.carText, id: query },
+    matched: { title: baseText, id: query },
     link: `${WEB}/s/iran/car?q=${encodeURIComponent(query)}`,
     cities: cityNames,
     items,

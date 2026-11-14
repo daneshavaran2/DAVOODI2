@@ -443,12 +443,16 @@ function render(data) {
   }
   const q = data.query;
   const matchedName =
+    data.canonical?.title ||
     data.sources.find((s) => s.id === 'bama' && s.matched)?.matched.title ||
     data.sources.find((s) => s.matched)?.matched.title ||
     q.carText;
   const yearTxt = q.year ? `، مدل ${fa(q.year.value)}` : '';
   const condTxt = q.condition === 'new' ? '، صفر' : q.condition === 'used' ? '، کارکرده' : '';
-  const head = `<p class="matched">نتیجه برای <strong>${esc(fa(matchedName))}</strong>${yearTxt}${condTxt}</p>`;
+  const unclear = q.yearUnclear
+    ? '<p class="matched note">سال ساخت را متوجه نشدم؛ قیمت سال‌های مختلف پایین آمده است. می‌توانید دوباره بگویید یا سال را تایپ کنید.</p>'
+    : '';
+  const head = `<p class="matched">نتیجه برای <strong>${esc(fa(matchedName))}</strong>${yearTxt}${condTxt}</p>${unclear}`;
 
   const allFailed = data.sources.every((s) => !s.ok);
   let main;
@@ -460,8 +464,32 @@ function render(data) {
     main = `<div class="card empty">برای «${esc(fa(q.carText))}»${esc(yearTxt)} قیمتی پیدا نشد. نام را دقیق‌تر بگویید (مثلاً با تیپ) یا سال دیگری را امتحان کنید.</div>`;
   }
 
-  results.innerHTML = head + main + yearsCard(data) + factoryCard(data) + data.sources.map(sourceCard).join('');
+  results.innerHTML =
+    head + main + hintsCard(data) + yearsCard(data) + factoryCard(data) + data.sources.map(sourceCard).join('');
   results.querySelector('.speak')?.addEventListener('click', (e) => speak(e.currentTarget.dataset.say));
+  results.querySelectorAll('.hint-chip').forEach((b) =>
+    b.addEventListener('click', () => {
+      input.value = b.dataset.q;
+      search(b.dataset.q);
+    }),
+  );
+}
+
+/** «کدام مدل؟»، «کدام تیپ؟»، «منظورتان این بود؟» — با زدن هر دکمه، همان جستجو دقیق‌تر تکرار می‌شود. */
+function hintsCard(data) {
+  if (!data.hints?.length) return '';
+  const q = data.query;
+  const suffix = [q.year ? `مدل ${q.year.value}` : '', q.condition === 'new' ? 'صفر' : q.condition === 'used' ? 'کارکرده' : '']
+    .filter(Boolean)
+    .join(' ');
+  const block = (h) => `
+    <div class="hint">
+      <p>${esc(fa(h.text))}</p>
+      <div class="examples">${h.options
+        .map((o) => `<button type="button" class="chip hint-chip" data-q="${esc(`${o} ${suffix}`.trim())}">${esc(fa(o))}</button>`)
+        .join('')}</div>
+    </div>`;
+  return `<div class="card hints">${data.hints.map(block).join('')}</div>`;
 }
 
 // ---------------------------------------------------------------- اجرای اولیه

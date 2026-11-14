@@ -25,3 +25,22 @@ test('خروجی واقعی Whisper: نام خودرو و سال', () => {
   assert.ok(ok >= 16, `${ok}/${items.length} درست فهمیده شد (انتظار دست‌کم ۱۶)`);
   assert.ok(years >= 24, `${years}/${items.length} سال درست (انتظار دست‌کم ۲۴)`);
 });
+
+test('نام ناقص گفته‌شده، پس از Whisper واقعی: همان خودرو و همان قیمتِ نام کامل', async () => {
+  const { setFetch } = await import('../src/http.js');
+  const { createDemoFetch } = await import('../src/demo.js');
+  const { lookupAll } = await import('../src/lookup.js');
+  setFetch(createDemoFetch());
+  const partial = JSON.parse(readFileSync(new URL('./fixtures/whisper-partial.json', import.meta.url))).items;
+  let same = 0;
+  let carRight = 0;
+  for (const it of partial) {
+    const want = await lookupAll(it.full);
+    const got = await lookupAll(cleanTranscript(it.whisper) || '-');
+    const car = got.canonical?.title === want.canonical?.title;
+    carRight += car;
+    same += car && (got.query?.year?.value ?? null) === (want.query.year?.value ?? null) && got.summary?.estimate === want.summary?.estimate;
+  }
+  assert.ok(same >= 13, `${same}/${partial.length} کاملاً درست (انتظار دست‌کم ۱۳)`);
+  assert.ok(carRight >= 16, `${carRight}/${partial.length} خودروی درست (انتظار دست‌کم ۱۶)`);
+});

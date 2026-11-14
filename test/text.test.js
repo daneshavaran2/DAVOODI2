@@ -108,3 +108,27 @@ test('خروجی انگلیسی و حروف اردو', () => {
 test('«یه» بیرون از عدد حرف تعریف است', () => {
   assert.equal(parseQuery('قیمت یه پژو 206', NOW).carText, 'پژو 206');
 });
+
+test('عدد دوتکه‌شده در خروجی تشخیص گفتار: «پانز ده»، «سی صد»', () => {
+  assert.equal(parseQuery('سراتو مدل دو هزار و پانز ده', NOW).year.value, 2015);
+  assert.equal(parseQuery('پژو سی صد و یک', NOW).carText, 'پژو 301');
+  assert.equal(parseQuery('سمند مدل نود و شیش', NOW).year.value, 1396);
+});
+
+test('سال نامفهوم: خودرو پیدا می‌شود و yearUnclear علامت می‌خورد', () => {
+  const q = parseQuery('سرین مدل نواتونان', NOW);
+  assert.equal(q.carText, 'سرین');
+  assert.equal(q.year, null);
+  assert.equal(q.yearUnclear, true);
+  assert.equal(parseQuery('شاهین مدل 1423', NOW).carText, 'شاهین');
+  assert.equal(parseQuery('پژو 206', NOW).yearUnclear, false);
+});
+
+test('عدد دورقمی آخر جمله بدون «مدل» سال است، مگر بخشی از نام مدل باشد', () => {
+  assert.equal(parseQuery('پراید ۹۸', NOW).year.value, 1398);
+  assert.equal(parseQuery('پارس دوگانه سوز 96', NOW).year.value, 1396);
+  assert.equal(parseQuery('شاهین ۰۳', NOW).year.value, 1403);
+  assert.equal(parseQuery('رنو ال 90', NOW).year, null);
+  assert.equal(parseQuery('پژو 206 تیپ 5', NOW).year, null);
+  assert.equal(parseQuery('سورن پلاس نود و نه', NOW).year.value, 1399);
+});

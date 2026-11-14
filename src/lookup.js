@@ -30,18 +30,48 @@ async function runSource(src, parsed, opts) {
   }
 }
 
+/**
+ * نام کامل خودرو از فهرست مدل‌های باما (کش‌شده). اگر کاربر فقط بخشی از نام را گفته باشد
+ * («۲۰۶»، «سورن»، «سراتو»)، هر سه سایت با همین نام کامل جستجو می‌شوند تا قیمت‌ها دربارهٔ یک خودرو باشند.
+ */
+async function canonicalize(query) {
+  try {
+    return await withTimeout(bama.resolveCanonical(query.carText), 12_000, bama.info.name);
+  } catch {
+    return null; // اگر باما در دسترس نباشد، هر سایت خودش نام را تطبیق می‌دهد
+  }
+}
+
 /** پرسش متنی (همان چیزی که کاربر گفته) ← قیمت‌ها از همهٔ سایت‌ها و جمع‌بندی. */
 export async function lookupAll(raw, opts = {}) {
   const query = parseQuery(raw);
   if (!query.carText) {
     return { query, error: 'نام خودرو تشخیص داده نشد. مثلاً بگویید: «پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰».', sources: [] };
   }
-  const results = await Promise.all(SOURCES.map((s) => runSource(s, query, opts)));
+  const canonical = await canonicalize(query);
+  const results = await Promise.all(SOURCES.map((s) => runSource(s, query, { ...opts, canonical })));
   const agg = aggregate(results, query);
+  if (agg.summary && canonical?.level === 'brand') agg.summary.label += ` — همهٔ مدل‌های ${canonical.title}`;
   const sources = results.map((r) => {
     const lists = (r.items || []).filter((i) => i.kind === 'list');
     const ads = (r.items || []).filter((i) => i.kind !== 'list');
     return { ...r, items: [...lists, ...ads.slice(0, MAX_ITEMS)], totalAds: ads.length };
   });
-  return { query, ...agg, sources };
+  return { query, canonical, hints: hintsFor(canonical), ...agg, sources };
+}
+
+/** پیشنهادهای دقیق‌تر کردن جستجو وقتی کاربر فقط بخشی از نام را گفته است. */
+export function hintsFor(c) {
+  if (!c) return [];
+  const hints = [];
+  const titles = (arr) => arr.map((x) => x.title);
+  if (c.level === 'brand' && c.refinements.length) {
+    hints.push({ kind: 'model', text: `این قیمت برای همهٔ مدل‌های ${c.title} است. کدام مدل؟`, options: titles(c.refinements) });
+  } else if (c.level === 'model' && c.refinements.length > 1) {
+    hints.push({ kind: 'trim', text: `این قیمت برای همهٔ تیپ‌های ${c.title} است. برای قیمت دقیق‌تر، تیپ را انتخاب کنید:`, options: titles(c.refinements) });
+  }
+  if (c.alternatives.length) {
+    hints.push({ kind: 'alt', text: 'شاید منظورتان یکی از این‌ها بود:', options: titles(c.alternatives) });
+  }
+  return hints;
 }

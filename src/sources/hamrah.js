@@ -149,24 +149,44 @@ export function filterTrims(rows, qTok, modelName) {
   return { rows: scored.filter(([, s]) => s >= bestScore - 1e-9).map(([r]) => r), trimMatched: true };
 }
 
-export async function lookup(parsed) {
-  const qTok = tokens(parsed.carText);
+async function findModel(qTok) {
   let top = null;
-  let firstErr = null;
+  let err = null;
   try {
     top = pickBest(qTok, await frontCatalog(), (m) => m.name);
   } catch (e) {
-    firstErr = e;
+    err = e;
   }
   // مدل‌های قدیمی (مثل پراید) در جدول روز نیستند؛ صفحهٔ برند را هم نگاه کن
-  const missesModelNumber = (t) =>
-    qTok.some((n) => isNum(n) && n.length >= 3 && !tokens(t.item.name).includes(n));
+  const missesModelNumber = (t) => qTok.some((n) => isNum(n) && n.length >= 3 && !tokens(t.item.name).includes(n));
   if (!top || top.precision < 1 || missesModelNumber(top)) {
     try {
       const alt = pickBest(qTok, await brandCatalog(qTok), (m) => m.name);
       if (alt && (!top || alt.score > top.score)) top = alt;
     } catch (e) {
-      firstErr = firstErr || e;
+      err = err || e;
+    }
+  }
+  return { top, err };
+}
+
+export async function lookup(parsed, { canonical = null } = {}) {
+  // اول با نام کامل مدل از باما (و تیپ آن)، اگر نشد با گفتهٔ کاربر
+  const canon = canonical && canonical.level !== 'brand' ? canonical : null;
+  const attempts = [
+    ...(canon ? [{ text: canon.modelTitle, trimWords: canon.trimWords }] : []),
+    { text: parsed.carText, trimWords: null },
+  ];
+  let top = null;
+  let used = null;
+  let firstErr = null;
+  for (const a of attempts) {
+    const r = await findModel(tokens(a.text));
+    firstErr = firstErr || r.err;
+    if (r.top) {
+      top = r.top;
+      used = a;
+      break;
     }
   }
   if (!top) {
@@ -177,7 +197,12 @@ export async function lookup(parsed) {
   const m = top.item;
   const page = parseModelPage(await nextData(`carprice/${m.brand}/${m.model}`), m.name);
   const warnings = [];
-  const { rows: trimRows, trimMatched } = filterTrims(page.rows, qTok, m.name);
+  const { rows: trimRows, trimMatched } =
+    used.trimWords === null
+      ? filterTrims(page.rows, tokens(used.text), m.name)
+      : used.trimWords
+        ? filterTrims(page.rows, tokens(used.trimWords), '')
+        : { rows: page.rows, trimMatched: null };
   if (trimMatched === false) warnings.push('تیپ گفته‌شده در همراه مکانیک پیدا نشد؛ همهٔ تیپ‌ها آمده است.');
 
   let items = trimRows;

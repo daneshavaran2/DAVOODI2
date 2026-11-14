@@ -52,7 +52,7 @@ export function resolveVehicle(vehicles, carText) {
   const top = pickBest(carText, vehicles, (v) => v.title, (v) => v.keywords);
   if (!top) return null;
   let v = top.item;
-  const qTok = tokens(carText);
+  const qTok = top.query || tokens(carText);
   // اگر بخش ویژهٔ تیپ (مثلاً «V8») در پرسش نیامده، همان مدل کلی را بگیر، نه یک تیپ دلخواه
   while (v.value.split(',').length >= 3) {
     const parentValue = v.value.split(',').slice(0, -1).join(',');
@@ -64,6 +64,56 @@ export function resolveVehicle(vehicles, carText) {
     v = parent;
   }
   return v;
+}
+
+const LEVELS = { 1: 'brand', 2: 'model', 3: 'trim' };
+
+/**
+ * نام کامل انتخاب‌شده به‌همراه:
+ *  alternatives: گزینه‌های هم‌سطح که با گفتهٔ کاربر هم جور درمی‌آیند («منظورتان این بود؟»)
+ *  moreSpecific: مدل‌های هم‌سطحی که همهٔ کلمه‌های نام انتخاب‌شده را دارند (پژو 206 SD برای پژو 206)؛
+ *                آگهی‌های آن‌ها نباید در قیمت این مدل حساب شود
+ *  refinements: زیرمجموعه‌ها (مدل‌های یک برند یا تیپ‌های یک مدل) برای دقیق‌تر کردن
+ */
+export function describeVehicle(vehicles, chosen, carText) {
+  const qTok = tokens(carText);
+  const depth = chosen.value.split(',').length;
+  const related = (v) =>
+    v.value === chosen.value || v.value.startsWith(`${chosen.value},`) || chosen.value.startsWith(`${v.value},`);
+  const sameLevel = vehicles.filter((v) => v.value.split(',').length === depth && !related(v));
+  const covers = (v) => qTok.length > 0 && qTok.every((q) => tokens(v.title).some((t) => tokenSim(q, t) >= 0.7));
+  const chosenTok = tokens(chosen.title);
+  const moreSpecific = sameLevel.filter((v) => {
+    const t = tokens(v.title);
+    return t.length > chosenTok.length && chosenTok.every((c) => t.includes(c));
+  });
+  const alternatives = [...new Map([...sameLevel.filter(covers), ...moreSpecific].map((v) => [v.value, v])).values()];
+  const refinements = vehicles.filter(
+    (v) => v.value.startsWith(`${chosen.value},`) && v.value.split(',').length === depth + 1,
+  );
+  const parent = depth === 3 ? vehicles.find((v) => v.value === chosen.value.split(',').slice(0, 2).join(',')) : null;
+  const parentTok = parent ? tokens(parent.title) : [];
+  return {
+    title: chosen.title,
+    value: chosen.value,
+    level: LEVELS[depth] || chosen.level,
+    modelTitle: parent ? parent.title : chosen.title,
+    trimWords: parent ? tokens(chosen.title).filter((t) => !parentTok.includes(t)).join(' ') : '',
+    alternatives: alternatives.slice(0, 6).map((v) => ({ title: v.title, value: v.value })),
+    moreSpecific: moreSpecific.map((v) => v.title),
+    refinements: refinements.slice(0, 12).map((v) => ({ title: v.title, value: v.value })),
+  };
+}
+
+/** نام کامل خودرو از فهرست باما (پیش از پرسیدن از سایت‌ها، تا هر سه سایت دربارهٔ یک خودرو باشند). */
+export async function resolveCanonical(carText) {
+  const vehicles = flattenVehicles(await get('/cad/api/filter/vehicle', [], 6 * HOUR));
+  let v = resolveVehicle(vehicles, carText);
+  if (!v) return null;
+  // برندی که فقط یک مدل دارد یعنی همان مدل (ابهامی نیست)
+  const children = vehicles.filter((x) => x.value.startsWith(`${v.value},`) && x.value.split(',').length === 2);
+  if (v.value.split(',').length === 1 && children.length === 1) v = children[0];
+  return describeVehicle(vehicles, v, carText);
 }
 
 export function parseAds(body) {
@@ -164,10 +214,13 @@ async function priceList(value) {
   }
 }
 
-export async function lookup(parsed) {
-  const vehicles = flattenVehicles(await get('/cad/api/filter/vehicle', [], 6 * HOUR));
-  if (!vehicles.length) throw new SourceError('فهرست خودروهای باما خالی برگشت.');
-  const v = resolveVehicle(vehicles, parsed.carText);
+export async function lookup(parsed, opts = {}) {
+  let v = opts.canonical ? { value: opts.canonical.value, title: opts.canonical.title } : null;
+  if (!v) {
+    const vehicles = flattenVehicles(await get('/cad/api/filter/vehicle', [], 6 * HOUR));
+    if (!vehicles.length) throw new SourceError('فهرست خودروهای باما خالی برگشت.');
+    v = resolveVehicle(vehicles, parsed.carText);
+  }
   if (!v) return { ...info, ok: true, matched: null, items: [], warnings: ['این خودرو در فهرست باما پیدا نشد.'] };
 
   const parts = v.value.split(',');

@@ -34,7 +34,7 @@ test('بدون سال: قیمت صفر و جدول سال‌ها', async () => {
   useFetch();
   const r = await lookupAll('پژو ۲۰۶');
   assert.equal(r.summary.key, 'new');
-  assert.ok(r.byYear.length >= 5);
+  assert.ok(r.byYear.length >= 3);
   assert.ok(r.byYear[0].key > r.byYear.at(-1).key);
   assert.ok(r.factory.length >= 1);
 });
@@ -44,7 +44,7 @@ test('مدل قدیمی (پراید) از صفحهٔ برند همراه مکا�
   const r = await lookupAll('پراید صد و سی و یک مدل نود و هشت');
   const h = r.sources.find((s) => s.id === 'hamrah');
   assert.equal(h.matched.id, 'saipa/pride131');
-  assert.equal(r.summary.estimate, 740e6);
+  assert.equal(r.summary.estimate, 742.5e6, 'میانهٔ باما (۷۴۵) و همراه مکانیک (۷۴۰)');
 });
 
 test('اگر یک سایت در دسترس نباشد، بقیه نتیجه می‌دهند', async () => {

@@ -9,7 +9,7 @@ import { normalize } from './text.js';
 const SPOKEN_LATIN = [
   ['جی ال ایکس', 'glx'], ['جی الیکس', 'glx'], ['جیل ایکس', 'glx'], ['جی ال ای', 'gli'],
   ['اس ال ایکس', 'slx'], ['اس الیکس', 'slx'], ['ای ال ایکس', 'elx'], ['ای الیکس', 'elx'],
-  ['ال ایکس', 'lx'], ['الیکس', 'lx'],
+  ['ال ایکس', 'lx'], ['الیکس', 'lx'], ['صندوقدار', 'sd'], ['صندوق دار', 'sd'],
   ['اس دی', 'sd'], ['جی تی', 'gt'], ['اس ای', 'se'], ['سی وی تی', 'cvt'], ['ام وی ام', 'mvm'],
   ['ای اف (\\d+)', 'ef$2'], ['تی یو (\\d+)', 'tu$2'], ['ایکس یو (\\d+)', 'xu$2'], ['ال (\\d+)', 'l$2'],
   ['ایکس (\\d+)', 'x$2'], ['وی (\\d+)', 'v$2'], ['اچ (\\d+)', 'h$2'],
@@ -95,17 +95,36 @@ export function scoreCandidate(qTok, titleTok, extraTok = []) {
   let score = qm * 2 + precision * 3 + mt * 0.5;
   const qNums = qTok.filter(isNum);
   if (qNums.length && !titleTok.some(isNum) && !extraTok.some((t) => qNums.includes(t))) score -= 3;
-  if (precision < 0.5 && qm < 2) return null;
+  // همهٔ کلمه‌های گفته‌شده در نام هست («سورن» برای «سمند سورن») یا نام بیشترش در پرسش آمده
+  const coversQuery = qTok.every((q) => best(q, pool) >= 0.7);
+  if (precision < 0.5 && qm < 2 && !coversQuery) return null;
   return { score, precision, qm, mt };
+}
+
+/**
+ * شکل‌های دیگر پرسش با چسباندن دو کلمهٔ کنار هم؛ تشخیص گفتار گاهی یک کلمه را دو تکه می‌نویسد
+ * («سرا تو» به جای «سراتو»).
+ */
+export function joinVariants(qTok) {
+  const out = [qTok];
+  for (let i = 0; i + 1 < qTok.length; i++) {
+    const a = qTok[i];
+    const b = qTok[i + 1];
+    if (isNum(a) || isNum(b) || a.length + b.length < 4) continue;
+    out.push([...qTok.slice(0, i), a + b, ...qTok.slice(i + 2)]);
+  }
+  return out;
 }
 
 /** بهترین مورد از items را برمی‌گرداند: { item, score, ... } یا null. */
 export function pickBest(query, items, getTitle, getExtra = () => '') {
   const qTok = Array.isArray(query) ? query : tokens(query);
   let top = null;
-  for (const item of items) {
-    const s = scoreCandidate(qTok, tokens(getTitle(item)), tokens(getExtra(item) || ''));
-    if (s && (!top || s.score > top.score)) top = { item, ...s };
+  for (const variant of joinVariants(qTok)) {
+    for (const item of items) {
+      const s = scoreCandidate(variant, tokens(getTitle(item)), tokens(getExtra(item) || ''));
+      if (s && (!top || s.score > top.score)) top = { item, ...s, query: variant };
+    }
   }
   return top;
 }

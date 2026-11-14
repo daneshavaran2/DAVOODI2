@@ -52,7 +52,7 @@ const TEENS = {
 };
 const TENS = { بیست: 20, سی: 30, چهل: 40, پنجاه: 50, شصت: 60, هفتاد: 70, هشتاد: 80, نود: 90, نوود: 90, نواد: 90 };
 const HUNDREDS = {
-  صد: 100, سد: 100, یکصد: 100, دویست: 200, دویس: 200, سیصد: 300, سیسد: 300, چهارصد: 400, چارصد: 400,
+  صد: 100, سد: 100, یکصد: 100, دویست: 200, دویس: 200, دیویست: 200, دیوست: 200, دیرست: 200, دیریست: 200, دریست: 200, سیصد: 300, سیسد: 300, چهارصد: 400, چارصد: 400,
   چارسد: 400, چهارسد: 400, پانصد: 500, پونصد: 500, پونسد: 500, ششصد: 600, شیشصد: 600, شیشسد: 600,
   هفتصد: 700, هفصد: 700, هشتصد: 800, هشصد: 800, نهصد: 900,
 };
@@ -68,7 +68,15 @@ function wordValue(w) {
 }
 
 /** «نوادو» ← «نواد و»، «نوادوشیش» ← «نواد و شیش»، «هزارو» ← «هزار و» (و چسبیده در گفتار). */
-function splitAttachedVa(tok) {
+function splitAttachedVa(input) {
+  // عدد دوتکه‌شده: «پانز ده» ← «پانزده»، «سی صد» ← «سیصد» (تشخیص گفتار یا نیم‌فاصله)
+  const tok = [];
+  for (let i = 0; i < input.length; i++) {
+    if (i + 1 < input.length && wordValue(input[i] + input[i + 1])) {
+      tok.push(input[i] + input[i + 1]);
+      i++;
+    } else tok.push(input[i]);
+  }
   const out = [];
   for (const t of tok) {
     if (wordValue(t) || t.length < 3 || !t.includes('و')) {
@@ -126,7 +134,13 @@ export function wordsToDigits(text) {
         w = tok[k];
       }
       // «یه» فقط بعد از «و» در میان عدد یعنی ۱ («سی و یه»)؛ در جای دیگر حرف تعریف است
-      const wv = w === undefined ? null : wordValue(w) || (k > j && w === 'یه' ? { v: 1, rank: 1 } : null);
+      // «ست» فقط بلافاصله بعد از یکان یعنی «صد» («چار ست» = ۴۰۰؛ Whisper گاهی «صد» را «ست» می‌نویسد)
+      const wv =
+        w === undefined
+          ? null
+          : wordValue(w) ||
+            (k > j && w === 'یه' ? { v: 1, rank: 1 } : null) ||
+            (k === j && w === 'ست' && lastRank === 1 && lastUnit !== null ? { v: 100, rank: 4 } : null);
       if (!wv) break;
       if (wv.rank === 5) {
         // «هزار» ضرب‌کننده است: «هزار و چهارصد»، «دو هزار»
@@ -136,7 +150,7 @@ export function wordsToDigits(text) {
         cur = 0;
         lastRank = 5;
         lastUnit = null;
-      } else if ((w === 'صد' || w === 'سد') && lastRank === 1 && lastUnit !== null) {
+      } else if ((w === 'صد' || w === 'سد' || w === 'ست') && lastRank === 1 && lastUnit !== null) {
         // «چهار صد» جدا نوشته شده
         cur += lastUnit * 99;
         lastRank = 4;
@@ -214,6 +228,16 @@ export function extractYear(text, now = new Date()) {
     const y = toYear(tok[last], now);
     if (y) return { year: y, rest: tok.slice(0, last).join(' ') };
   }
+  // «پراید ۹۸»، «پارس دوگانه سوز ۹۶»: عدد دورقمی آخر جمله (۵۰ تا ۹۹ یا ۰۰ تا امسال) معمولاً سال است؛
+  // ولی نه وقتی بخشی از نام مدل است («ال ۹۰»، «تیپ ۵»، «x 22»، «تیگو ۷»).
+  if (
+    last > 0 &&
+    /^\d{2}$/.test(tok[last]) &&
+    !/^(ال|l|x|ایکس|تیپ|وی|v|اس|s|اچ|h|کیو|q|ام|m|اف|f|تی|t|جی|g|تیگو|آریزو|اریزو|سی|c|ان|n|ای|e)$/i.test(tok[last - 1])
+  ) {
+    const y = toYear(tok[last], now);
+    if (y && (Number(tok[last]) >= 50 || tok[last].startsWith('0'))) return { year: y, rest: tok.slice(0, last).join(' ') };
+  }
   return { year: null, rest: text };
 }
 
@@ -265,7 +289,7 @@ const STOPWORDS = new Set([
   'چنده', 'چند', 'چقدر', 'چقد', 'چیه', 'است', 'هست', 'میشه', 'می', 'شه', 'رو', 'را', 'از', 'به', 'برای',
   'بگو', 'بگید', 'بده', 'بدید', 'میخوام', 'میخواستم', 'خوام', 'خواهم', 'خواستم', 'لطفا', 'لطفاً',
   'حدودی', 'حدود', 'تقریبی', 'تقریبا', 'امروز', 'روز', 'بازار', 'الان', 'الآن', 'فعلی', 'یه', 'سلام',
-  'تومن', 'تومان', 'من', 'یک', 'دنبال', 'هستم', 'در', 'با', 'آیا', 'ایا', 'و',
+  'تومن', 'تومان', 'من', 'یک', 'دنبال', 'هستم', 'در', 'با', 'آیا', 'ایا', 'و', 'مدل', 'سال',
 ]);
 
 // شکل‌های آوایی «مدل» و نام‌هایی که تشخیص گفتار گاهی به انگلیسی می‌نویسد
@@ -308,10 +332,21 @@ export function parseQuery(raw, now = new Date()) {
   text = text.replace(USED_WORDS, ' ').replace(NEW_WORDS, ' ').replace(/\s+/g, ' ').trim();
 
   const { year, rest } = extractYear(text, now);
-  const carText = rest
+  let carRest = rest;
+  let yearUnclear = false;
+  if (!year) {
+    // «مدل» گفته شده ولی سال فهمیده نشد (مثلاً «مدل نواتونان» یا «مدل ۱۴۲۳»):
+    // آن کلمه جزو نام خودرو نیست؛ خودرو پیدا می‌شود و به کاربر گفته می‌شود سال را نفهمیدیم
+    const m = carRest.match(/(^| )(مدل|سال)( [^ ]+)?$/) || carRest.match(/(^| )(مدل|سال) (\d+)(?= )/);
+    if (m) {
+      carRest = (carRest.slice(0, m.index) + ' ' + carRest.slice(m.index + m[0].length)).trim();
+      yearUnclear = Boolean(m[3]);
+    }
+  }
+  const carText = carRest
     .split(' ')
     .filter((t) => t && !STOPWORDS.has(t))
     .join(' ');
 
-  return { raw: String(raw ?? ''), normalized: text, carText, year, condition };
+  return { raw: String(raw ?? ''), normalized: text, carText, year, yearUnclear, condition };
 }

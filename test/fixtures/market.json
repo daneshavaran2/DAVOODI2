@@ -1,0 +1,104 @@
+{
+ "note": "بازار نمونه برای حالت نمایشی و آزمون‌ها؛ قیمت‌ها ساختگی‌اند (تومان). src/demo.js از این فایل پاسخ‌هایی با همان ساختار پاسخ واقعی باما، دیوار و همراه مکانیک می‌سازد.",
+ "brands": {
+  "peugeot": { "bama": "پژو" },
+  "samand": { "bama": "سمند" },
+  "saipa": { "bama": "سایپا" },
+  "kia": { "bama": "کیا" },
+  "pride": { "bama": "پراید" }
+ },
+ "hamrahBrands": [
+  { "slug": "irankhodro", "name": "ایران خودرو" },
+  { "slug": "saipa", "name": "سایپا" },
+  { "slug": "kia", "name": "کیا" }
+ ],
+ "cars": [
+  {
+   "value": "peugeot,206ir", "title": "پژو 206", "keywords": "پژو 206 دویست و شش peugeot 206ir",
+   "hamrah": { "brand": "irankhodro", "model": "peugeot206", "name": "پژو 206", "domestic": true },
+   "trims": {
+    "type2": { "title": "پژو 206 تیپ 2", "fa": "تیپ 2" },
+    "type5": { "title": "پژو 206 تیپ 5", "fa": "تیپ 5" }
+   },
+   "prices": [
+    { "trim": "type2", "year": 1405, "market": 2350000000, "factory": 1485000000, "hamrah": 2320000000, "bama": [2380000000], "divar": [2300000000], "new": true },
+    { "trim": "type2", "year": 1400, "hamrah": 1810000000, "bama": [1820000000, 1890000000, 1760000000, 1795000000, 950000000], "divar": [1850000000, 1780000000, 1830000000] },
+    { "trim": "type2", "year": 1399, "hamrah": 1680000000, "bama": [1660000000, 1700000000, 1620000000], "divar": [1650000000] },
+    { "trim": "type2", "year": 1398, "hamrah": 1560000000, "bama": [1540000000, 1500000000], "divar": [1520000000] },
+    { "trim": "type5", "year": 1405, "market": 2620000000, "factory": 1690000000, "hamrah": 2600000000, "new": true },
+    { "trim": "type5", "year": 1400, "hamrah": 2010000000, "bama": [2020000000, 2060000000], "divar": [2050000000] }
+   ]
+  },
+  {
+   "value": "peugeot,206sd", "title": "پژو 206 SD", "keywords": "پژو 206 sd صندوقدار اس دی peugeot 206sd",
+   "hamrah": { "brand": "irankhodro", "model": "peugeot206sd", "name": "پژو 206 صندوقدار", "domestic": true },
+   "trims": { "v8": { "title": "پژو 206 SD V8", "fa": "V8" } },
+   "prices": [
+    { "trim": "v8", "year": 1405, "market": 2550000000, "factory": 1620000000, "hamrah": 2520000000, "new": true },
+    { "trim": "v8", "year": 1400, "hamrah": 1960000000, "bama": [1950000000, 1990000000], "divar": [1970000000] }
+   ]
+  },
+  {
+   "value": "peugeot,pars", "title": "پژو پارس", "keywords": "پژو پارس پرشیا peugeot pars",
+   "hamrah": { "brand": "irankhodro", "model": "peugeotpars", "name": "پژو پارس", "domestic": true },
+   "trims": {
+    "cng": { "title": "پژو پارس دوگانه سوز", "fa": "دوگانه سوز" },
+    "elx": { "title": "پژو پارس ELX-XU7", "fa": "ELX-XU7" }
+   },
+   "prices": [
+    { "trim": "cng", "year": 1405, "market": 2950000000, "factory": 1900000000, "hamrah": 2900000000, "new": true },
+    { "trim": "cng", "year": 1396, "hamrah": 1710000000, "bama": [1680000000, 1720000000], "divar": [1700000000] },
+    { "trim": "elx", "year": 1405, "market": 3250000000, "hamrah": 3200000000, "new": true }
+   ]
+  },
+  {
+   "value": "samand,soren", "title": "سمند سورن", "keywords": "سمند سورن samand soren",
+   "hamrah": { "brand": "irankhodro", "model": "samandsoren", "name": "سمند سورن", "domestic": true },
+   "trims": { "plus": { "title": "سمند سورن پلاس", "fa": "پلاس" } },
+   "prices": [
+    { "trim": "plus", "year": 1405, "market": 3000000000, "factory": 1950000000, "hamrah": 2980000000, "new": true },
+    { "trim": "plus", "year": 1399, "hamrah": 2170000000, "bama": [2150000000, 2200000000], "divar": [2180000000] }
+   ]
+  },
+  {
+   "value": "saipa,shahin", "title": "شاهین", "keywords": "شاهین سایپا saipa shahin",
+   "hamrah": { "brand": "saipa", "model": "shahin", "name": "شاهین", "domestic": true },
+   "trims": { "g": { "title": "شاهین G", "fa": "G" } },
+   "prices": [
+    { "trim": "g", "year": 1405, "market": 2200000000, "factory": 1550000000, "hamrah": 2180000000, "bama": [2240000000], "new": true },
+    { "trim": "g", "year": 1403, "hamrah": 2060000000, "bama": [2050000000, 2100000000], "divar": [2080000000] }
+   ]
+  },
+  {
+   "value": "kia,cerato", "title": "کیا سراتو", "keywords": "کیا سراتو kia cerato",
+   "hamrah": { "brand": "kia", "model": "cerato", "name": "سراتو" },
+   "trims": {},
+   "prices": [
+    { "year": 2015, "hamrah": 4000000000, "bama": [3900000000, 4100000000, 4000000000], "divar": [4050000000] },
+    { "year": 2016, "hamrah": 4350000000, "bama": [4300000000, 4400000000] }
+   ]
+  },
+  {
+   "value": "pride,131", "title": "پراید 131", "keywords": "پراید 131 صد و سی و یک pride",
+   "hamrah": { "brand": "saipa", "model": "pride131", "name": "پراید 131" },
+   "trims": {},
+   "prices": [
+    { "year": 1399, "hamrah": 790000000, "bama": [790000000, 810000000], "divar": [800000000] },
+    { "year": 1398, "hamrah": 740000000, "bama": [740000000, 750000000] }
+   ]
+  },
+  {
+   "value": "pride,111", "title": "پراید 111", "keywords": "پراید 111 صد و یازده pride",
+   "hamrah": { "brand": "saipa", "model": "pride111", "name": "پراید 111" },
+   "trims": {},
+   "prices": [
+    { "year": 1398, "hamrah": 690000000, "bama": [680000000, 700000000], "divar": [695000000] }
+   ]
+  }
+ ],
+ "divarNoise": [
+  { "title": "خریدار پژو ۲۰۶ و پراید", "price": "توافقی" },
+  { "title": "رینگ و لاستیک پژو ۲۰۶", "price": 12000000 },
+  { "title": "اجاره روزانه سراتو", "price": 2500000 }
+ ]
+}
