@@ -166,3 +166,13 @@ test('خودروی ناشناخته: بدون قیمت ساختگی', async () =
   const r = await lookupAll('بنز کلاس اس مدل 2020');
   assert.equal(r.summary, null);
 });
+
+test('«کارکرده»: آگهی‌های صفر کیلومتر باما در نتیجه نیستند', async () => {
+  useMarket();
+  const r = await lookupAll('پژو 206 تیپ 2 کارکرده مدل 1405');
+  assert.equal(r.summary, null, 'برای ۱۴۰۵ آگهی کارکرده‌ای نیست؛ قیمت صفر نباید جای آن بیاید');
+  const bama = r.sources.find((s) => s.id === 'bama');
+  assert.ok(bama.items.every((i) => !i.isNew));
+  // سال کارکرده‌ای که داده دارد همان قیمت قبلی را می‌دهد
+  assert.equal((await lookupAll('پژو 206 تیپ 2 کارکرده مدل 1400')).summary.estimate, 1810 * M);
+});

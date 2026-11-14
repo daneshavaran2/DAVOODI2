@@ -115,7 +115,9 @@ export function aggregate(results, parsed, now = new Date()) {
     const y = parsed.year.value;
     summary = byYear.find((r) => r.key === y) || null;
     label = `مدل ${y}`;
-    if (!summary && newCar && (y >= cj - 1 || (parsed.year.calendar === 'gregorian' && y >= now.getFullYear() - 1))) {
+    // سال خواسته‌شده تازه است (در همان تقویم) و کاربر «کارکرده» نخواسته ← قیمت صفر کیلومتر
+    const recent = parsed.year.calendar === 'gregorian' ? y >= now.getFullYear() - 1 : y >= cj - 1;
+    if (!summary && newCar && recent && parsed.condition !== 'used') {
       summary = newCar;
       label = `مدل ${y} (صفر کیلومتر)`;
     }

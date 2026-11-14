@@ -72,3 +72,13 @@ test('aggregate: سال جاری بدون آگهی ← قیمت صفر', () => {
 test('aggregate: سال بی‌داده ← بدون جمع‌بندی', () => {
   assert.equal(aggregate(results, { year: { value: 1390, calendar: 'jalali' } }, NOW).summary, null);
 });
+
+test('سال میلادی قدیمی بدون داده با قیمت صفرِ امسال پر نمی‌شود', () => {
+  // فقط قیمت صفر (امسال) داریم؛ ۲۰۱۵ نباید «صفر کیلومتر» نشان داده شود، ولی ۲۰۲۶ بله
+  assert.equal(aggregate(results, { year: { value: 2015, calendar: 'gregorian' } }, NOW).summary, null);
+  assert.equal(aggregate(results, { year: { value: 2026, calendar: 'gregorian' } }, NOW).summary.key, 'new');
+});
+
+test('«کارکرده» با سال جاری: قیمت صفر کیلومتر جایگزین نمی‌شود', () => {
+  assert.equal(aggregate(results, { year: { value: 1405, calendar: 'jalali' }, condition: 'used' }, NOW).summary, null);
+});

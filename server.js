@@ -108,7 +108,12 @@ function citiesParam(v) {
 }
 
 async function serveStatic(req, res, pathname) {
-  const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+  let rel;
+  try {
+    rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+  } catch {
+    return send(res, 400, 'Bad request'); // «%FF» و مانند آن
+  }
   const file = normPath(join(PUBLIC, rel));
   if (!file.startsWith(PUBLIC)) return send(res, 403, 'Forbidden');
   try {
@@ -124,8 +129,8 @@ async function serveStatic(req, res, pathname) {
 }
 
 export const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://localhost');
   try {
+    const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/api/transcribe') {
       if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' }, { Allow: 'POST' });
       if (!allowed(clientIp(req))) {
@@ -173,7 +178,8 @@ export const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname.startsWith('/api/')) return send(res, 404, { error: 'Not found' });
-    return serveStatic(req, res, url.pathname);
+    // await لازم است تا خطای احتمالی همین‌جا گرفته شود و سرور از کار نیفتد
+    return await serveStatic(req, res, url.pathname);
   } catch (e) {
     console.error(e);
     return send(res, 500, { error: 'خطای داخلی سرور.' });

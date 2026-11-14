@@ -236,6 +236,10 @@ export async function lookup(parsed, opts = {}) {
   // فهرست قیمت روز فقط برای خودروی صفر است؛ اگر سال قدیمی‌تری خواسته شده، کنار گذاشته نمی‌شود
   // ولی در جمع‌بندی همان سال به کار نمی‌رود (aggregate براساس سال گروه‌بندی می‌کند).
   if (parsed.condition === 'used') listItems = [];
+  // «کارکرده» یعنی بدون آگهی‌های صفر کیلومتر، و «صفر» فقط صفر کیلومتر (مثل دیوار و همراه مکانیک)
+  let adItems = ads.status === 'fulfilled' ? ads.value : [];
+  if (parsed.condition === 'used') adItems = adItems.filter((a) => !a.isNew);
+  if (parsed.condition === 'new') adItems = adItems.filter((a) => a.isNew);
 
   return {
     ...info,
@@ -243,7 +247,7 @@ export async function lookup(parsed, opts = {}) {
     matched: { title: v.title, id: v.value },
     link: `${SITE}/car/${parts.join('-')}`,
     priceLink: parts.length >= 2 ? `${SITE}/price/${parts[0]}` : null,
-    items: [...listItems, ...(ads.status === 'fulfilled' ? ads.value : [])],
+    items: [...listItems, ...adItems],
     warnings,
   };
 }
