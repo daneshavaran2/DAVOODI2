@@ -14,6 +14,7 @@ import { lookupAll, SOURCES } from './src/lookup.js';
 import { CITIES, DEFAULT_CITIES } from './src/sources/divar.js';
 import { diagnose } from './src/diagnose.js';
 import { LIMITS, parseWav, SttError, sttStatus, transcribe } from './src/stt.js';
+import { download, ensureModel } from './src/model.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -91,7 +92,13 @@ const DEMO_TRANSCRIPT = 'پژو دویست و شش تیپ دو مدل هزار �
 async function sttInfo() {
   const s = await sttStatus();
   if (s.available) return { server: true, model: s.modelName };
-  return DEMO ? { server: true, model: 'demo', demo: true } : { server: false };
+  if (DEMO) return { server: true, model: 'demo', demo: true };
+  // چرا تشخیص گفتار سرور فعال نیست (برای /api/health و عیب‌یابی)
+  return {
+    server: false,
+    reason: s.disabledReason || download.error || null,
+    download: download.state === 'idle' ? undefined : { state: download.state, model: download.model, percent: download.percent },
+  };
 }
 
 function clientIp(req) {
@@ -191,9 +198,16 @@ if (isMain) {
   server.listen(PORT, HOST, async () => {
     console.log(`قیمت‌یاب خودرو آماده است: http://localhost:${PORT}${DEMO ? '  (حالت نمایشی — قیمت‌ها واقعی نیستند)' : ''}`);
     const s = await sttStatus();
+    if (s.available) return console.log(`تشخیص گفتار روی سرور: فعال (${s.modelName})`);
+    if (s.bin && !s.model && !DEMO && !s.disabledReason) {
+      // whisper هست ولی مدل نه (مثلاً اولین اجرای کانتینر): دانلود در پس‌زمینه
+      console.log('تشخیص گفتار روی سرور: مدل هنوز نیست؛ دانلود در پس‌زمینه شروع شد. تا آن موقع تشخیص گفتار مرورگر.');
+      ensureModel().catch((e) => console.error('دانلود مدل:', e));
+      return;
+    }
     console.log(
-      s.available
-        ? `تشخیص گفتار روی سرور: فعال (${s.modelName})`
+      s.disabledReason
+        ? `تشخیص گفتار روی سرور: خاموش — ${s.disabledReason}`
         : DEMO
           ? 'تشخیص گفتار روی سرور: نمایشی (whisper نصب نیست؛ همیشه یک جملهٔ نمونه برمی‌گردد)'
           : 'تشخیص گفتار روی سرور: نصب نیست (bash scripts/setup-whisper.sh) — فعلاً تشخیص گفتار مرورگر استفاده می‌شود.',

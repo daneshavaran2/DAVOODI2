@@ -8,8 +8,11 @@ import { constants as FS } from 'node:fs';
 import { cpus, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { memoryStatus } from './memory.js';
 
 const ROOT = fileURLToPath(new URL('../whisper/', import.meta.url));
+/** پوشهٔ مدل‌ها (در کانتینر، دیسک لیارا می‌تواند این‌جا وصل شود) */
+export const MODELS_DIR = process.env.WHISPER_MODELS_DIR || join(ROOT, 'models');
 
 // پرامپت اولیه: Whisper نام‌های خاص را بهتر می‌شنود اگر پیش‌تر در «متن قبلی» آمده باشند.
 // فقط نام‌ها، بدون عدد: در آزمایش، عدد در پرامپت باعث می‌شد Whisper عددهای اشتباه بنویسد.
@@ -34,9 +37,9 @@ export const LIMITS = { minSeconds: 0.3, maxSeconds: 30, maxBytes: 16000 * 2 * 3
 export async function sttConfig(env = process.env) {
   let model = env.WHISPER_MODEL || null;
   if (!model) {
-    const files = await readdir(join(ROOT, 'models')).catch(() => []);
+    const files = await readdir(MODELS_DIR).catch(() => []);
     const name = MODEL_PREFERENCE.find((m) => files.includes(`ggml-${m}.bin`));
-    if (name) model = join(ROOT, 'models', `ggml-${name}.bin`);
+    if (name) model = join(MODELS_DIR, `ggml-${name}.bin`);
   }
   return {
     bin: env.WHISPER_BIN || join(ROOT, 'whisper.cpp', 'build', 'bin', 'whisper-cli'),
@@ -45,6 +48,8 @@ export async function sttConfig(env = process.env) {
     threads: Number(env.WHISPER_THREADS) || Math.max(1, Math.min(4, cpus().length)),
     prompt: env.WHISPER_PROMPT ?? DEFAULT_PROMPT,
     concurrency: Math.max(1, Number(env.WHISPER_CONCURRENCY) || 1),
+    // مدل پیش‌فرض (turbo q8) در آزمایش حدود ۱۱۰۰ مگابایت حافظه گرفت؛ کمتر از این، whisper اجرا نمی‌شود
+    minMemoryMB: Number(env.WHISPER_MIN_MEMORY_MB ?? 1400),
     timeoutMs: Number(env.WHISPER_TIMEOUT_MS) || 60_000,
     // auto: برای صدای کوتاه -ac 512؛ 0: همیشه پنجرهٔ کامل؛ عدد: همان مقدار
     audioCtx: env.WHISPER_AUDIO_CTX ?? 'auto',
@@ -69,13 +74,17 @@ export function _resetDisabled() {
 export async function sttStatus(cfg) {
   cfg = cfg || (await sttConfig());
   const ok = async (p, mode) => !!p && access(p, mode).then(() => true, () => false);
-  const [bin, model] = await Promise.all([ok(cfg.bin, FS.X_OK), ok(cfg.model, FS.R_OK)]);
+  const [bin, model, mem] = await Promise.all([ok(cfg.bin, FS.X_OK), ok(cfg.model, FS.R_OK), memoryStatus(cfg.minMemoryMB)]);
+  const memReason = mem.ok
+    ? null
+    : `حافظهٔ این برنامه (${mem.limitMB} مگابایت) برای تشخیص گفتار روی سرور کافی نیست (دست‌کم ${mem.minMB} مگابایت).`;
   return {
-    available: bin && model && !disabledReason,
+    available: bin && model && !disabledReason && mem.ok,
     bin,
     model,
     modelName: cfg.model ? cfg.model.split(/[\\/]/).pop() : null,
-    disabledReason,
+    memoryMB: mem.limitMB,
+    disabledReason: disabledReason || memReason,
   };
 }
 
