@@ -1,4 +1,5 @@
-// تشخیص گفتار فارسی روی خود سرور با whisper.cpp (بدون وابستگی به گوگل یا سرویس خارجی).
+// تشخیص گفتار فارسی روی خود سرور با whisper.cpp (بدون وابستگی به گوگل یا سرویس خارجی)؛
+// و اگر STT_API_URL و STT_API_KEY تنظیم شده باشد، اول سرویس ابری سریع (src/cloudstt.js) و whisper به‌عنوان پشتیبان.
 // مرورگر صدا را به شکل WAV (۱۶ کیلوهرتز، تک‌کاناله، ۱۶ بیتی) می‌فرستد و این ماژول آن را با زبان فارسی و
 // یک «پرامپت» شامل نام خودروها به متن تبدیل می‌کند:
 //   - whisper-server (پیش‌فرض): یک بار اجرا می‌شود و مدل همیشه در حافظه است؛ هر جمله بدون بار کردن مدل.
@@ -12,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cpuLimit, memoryLimitBytes, memoryStatus } from './memory.js';
+import { cloudConfig, cloudTranscribe, cloudUsable } from './cloudstt.js';
 
 const ROOT = fileURLToPath(new URL('../whisper/', import.meta.url));
 /** پوشهٔ مدل‌ها (در کانتینر، دیسک لیارا می‌تواند این‌جا وصل شود) */
@@ -217,9 +219,19 @@ export function recentRuns() {
 /** زمان تخمینی یک تبدیل روی همین سرور (میانهٔ اجراهای اخیر) یا null */
 let warmMs = null; // زمان تبدیل آزمایشی هنگام راه‌اندازی whisper-server
 export function estimateMs() {
-  if (!recent.length) return warmMs;
-  const v = recent.map((r) => r.ms).sort((a, b) => a - b);
+  // اگر سرویس ابری فعال است، زمان‌های همان؛ وگرنه whisper خود سرور
+  const cloud = cloudUsable();
+  const runs = recent.filter((r) => (r.via === 'cloud') === cloud);
+  if (!runs.length) return cloud ? null : warmMs;
+  const v = runs.map((r) => r.ms).sort((a, b) => a - b);
   return v[Math.floor(v.length / 2)];
+}
+
+function record(info, ms, via, threads, host) {
+  recent.push({ ms, seconds: Math.round(info.seconds * 10) / 10, threads, via, at: new Date().toISOString() });
+  if (recent.length > 10) recent.shift();
+  const how = via === 'cloud' ? `ابری، ${host}` : `${threads} رشته، ${via === 'server' ? 'whisper-server' : 'whisper-cli'}`;
+  console.log(`تبدیل گفتار: ${info.seconds.toFixed(1)} ثانیه صدا در ${(ms / 1000).toFixed(1)} ثانیه (${how})`);
 }
 
 /** WAV سکوت با نویز بسیار کم (برای تبدیل آزمایشی) */
@@ -401,8 +413,31 @@ export async function transcribe(wav, cfg, { onStart } = {}) {
   const info = parseWav(wav);
   if (info.seconds < LIMITS.minSeconds) throw new SttError('صدا خیلی کوتاه بود؛ دوباره بگویید.');
   if (info.seconds > LIMITS.maxSeconds) throw new SttError(`صدا حداکثر ${LIMITS.maxSeconds} ثانیه می‌تواند باشد.`);
+
+  // سرویس ابری (اگر تنظیم شده): یکی دو ثانیه؛ اگر خطا داد یا دیر کرد، همین صدا با whisper خود سرور
+  const cloud = cloudConfig();
+  if (cloudUsable(cloud)) {
+    onStart?.();
+    const t0 = Date.now();
+    try {
+      const raw = await cloudTranscribe(wav, { prompt: cfg.prompt, language: cfg.language }, cloud);
+      const ms = Date.now() - t0;
+      record(info, ms, 'cloud', null, cloud.host);
+      return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms, seconds: info.seconds, via: 'cloud' };
+    } catch (e) {
+      console.error(`تبدیل گفتار ابری: ${e.message} این بار با whisper خود سرور.`);
+    }
+  }
+
   const status = await sttStatus(cfg);
-  if (!status.available) throw new SttError(status.disabledReason || 'تشخیص گفتار روی سرور نصب نشده است.', 503);
+  if (!status.available) {
+    throw new SttError(
+      cloud
+        ? 'تبدیل گفتار الان ممکن نشد (سرویس ابری جواب نداد و تشخیص گفتار خود سرور هم آماده نیست)؛ چند لحظه بعد دوباره بگویید.'
+        : status.disabledReason || 'تشخیص گفتار روی سرور نصب نشده است.',
+      503,
+    );
+  }
 
   const release = await slot(cfg.concurrency);
   onStart?.();
@@ -432,9 +467,7 @@ export async function transcribe(wav, cfg, { onStart } = {}) {
       raw = await run(cfg.bin, args, cfg.timeoutMs);
     }
     const ms = Date.now() - t0;
-    recent.push({ ms, seconds: Math.round(info.seconds * 10) / 10, threads: cfg.threads, via, at: new Date().toISOString() });
-    if (recent.length > 10) recent.shift();
-    console.log(`تبدیل گفتار: ${info.seconds.toFixed(1)} ثانیه صدا در ${(ms / 1000).toFixed(1)} ثانیه (${cfg.threads} رشته، ${via === 'server' ? 'whisper-server' : 'whisper-cli'})`);
+    record(info, ms, via, cfg.threads);
     return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms, seconds: info.seconds, via };
   } finally {
     release();

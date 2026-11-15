@@ -17,6 +17,7 @@ import { lookupAll, SOURCES } from './src/lookup.js';
 import { CITIES, DEFAULT_CITIES } from './src/sources/divar.js';
 import { diagnose } from './src/diagnose.js';
 import { findRivals } from './src/rivals.js';
+import { cloudConfig, cloudStatus } from './src/cloudstt.js';
 import { estimateMs, LIMITS, parseWav, persistentStatus, recentRuns, startPersistent, stopPersistent, SttError, sttConfig, sttStatus, transcribe } from './src/stt.js';
 import { cpuInfo, cpuLimit } from './src/memory.js';
 import { download, ensureModel } from './src/model.js';
@@ -103,11 +104,15 @@ const DEMO_TRANSCRIPT = 'پژو دویست و شش تیپ دو مدل هزار �
 
 async function sttInfo({ detail = false } = {}) {
   const s = await sttStatus();
-  if (s.available) {
-    if (!detail) return { server: true, model: s.modelName, estimateMs: estimateMs() };
+  const cloud = cloudStatus();
+  if (s.available || cloud.configured) {
+    if (!detail) return { server: true, model: cloud.usable ? `${cloud.model} (ابری)` : s.modelName, estimateMs: estimateMs() };
     const cfg = await sttConfig();
     return {
       server: true,
+      cloud,
+      local: s.available ? 'ready' : s.disabledReason || (['downloading', 'verifying'].includes(download.state) ? download.state : 'off'),
+      download: s.available || download.state === 'idle' ? undefined : { state: download.state, model: download.model, percent: download.percent },
       model: s.modelName,
       threads: cfg.threads,
       cpu: await cpuLimit(),
@@ -171,9 +176,18 @@ async function statusPage() {
   const ci = await cpuInfo();
   const sec = (ms) => (ms ? `${faNum((ms / 1000).toFixed(1))} ثانیه` : '—');
   const rows = [];
-  rows.push(['تبدیل گفتار روی سرور', stt.server ? 'روشن' : `خاموش${stt.reason ? ` — ${stt.reason}` : ''}`]);
+  const c = stt.cloud || cloudStatus();
+  rows.push([
+    'تبدیل گفتار ابری (سریع، برای آیفون)',
+    !c.configured
+      ? 'تنظیم نشده (STT_API_URL و STT_API_KEY)'
+      : `${c.usable ? 'روشن' : 'موقتاً کنار گذاشته شده'} — ${c.host}، ${c.model}؛ موفق ${faNum(c.ok)}، ناموفق ${faNum(c.failed)}` +
+        (c.lastError ? `؛ آخرین خطا: ${c.lastError}` : ''),
+  ]);
+  const localOn = stt.server && (stt.local === undefined || stt.local === 'ready');
+  rows.push(['تبدیل گفتار روی خود سرور', localOn ? 'روشن' : `خاموش${stt.reason ? ` — ${stt.reason}` : typeof stt.local === 'string' && stt.local !== 'off' ? ` — ${stt.local}` : ''}`]);
   if (stt.download) rows.push(['آماده شدن مدل', `${stt.download.state} ${faNum(stt.download.percent ?? '')}٪`]);
-  if (stt.server && !stt.demo) {
+  if (localOn && !stt.demo) {
     rows.push(['مدل', stt.model]);
     rows.push(['مدل همیشه در حافظه (whisper-server)', stt.persistent?.state === 'ready' ? 'بله' : stt.persistent?.state || '—']);
     rows.push(['زمان معمول هر جمله', sec(stt.estimateMs)]);
@@ -185,7 +199,7 @@ async function statusPage() {
   const recent = (stt.recent || [])
     .slice()
     .reverse()
-    .map((r) => `<li>${faNum(r.seconds)} ثانیه صدا ← ${sec(r.ms)} (${r.via === 'server' ? 'whisper-server' : 'whisper-cli'}، ${faNum(r.threads)} رشته)</li>`)
+    .map((r) => `<li>${faNum(r.seconds)} ثانیه صدا ← ${sec(r.ms)} (${r.via === 'cloud' ? 'ابری' : `${r.via === 'server' ? 'whisper-server' : 'whisper-cli'}، ${faNum(r.threads)} رشته`})</li>`)
     .join('');
   return `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>وضعیت سرور</title><style>body{font:18px/1.9 Tahoma,system-ui,sans-serif;margin:0;padding:20px 16px;background:#0e1b2c;color:#f3f5f8}
@@ -284,7 +298,7 @@ async function handle(req, res) {
         if (url.searchParams.get('async') === '1') {
           parseWav(wav); // صدای نامعتبر همین الان خطا بدهد
           const st = await sttStatus();
-          if (!st.available) throw new SttError(st.disabledReason || 'تشخیص گفتار روی سرور نصب نشده است.', 503);
+          if (!st.available && !cloudConfig()) throw new SttError(st.disabledReason || 'تشخیص گفتار روی سرور نصب نشده است.', 503);
           const pending = [...jobs.values()].filter((j) => j.state === 'queued' || j.state === 'running').length;
           if (pending >= MAX_PENDING_JOBS) throw new SttError('سرور الان سرش شلوغ است؛ چند لحظه بعد دوباره بگویید.', 429);
           const job = startJob(wav);
@@ -426,6 +440,9 @@ if (isMain) {
   server.listen(PORT, HOST, async () => {
     const a = server.address();
     console.log(`دستیار هوشمند خودرو داوودی آماده است: روی ${where(a)} گوش می‌دهد${DEMO ? '  (حالت نمایشی — قیمت‌ها واقعی نیستند)' : ''}`);
+    const cloud = cloudConfig();
+    if (cloud) console.log(`تبدیل گفتار ابری: فعال (${cloud.host}، ${cloud.model})؛ اگر جواب نداد، whisper خود سرور.`);
+    else if (process.env.STT_API_URL || process.env.STT_API_KEY) console.log('تبدیل گفتار ابری: STT_API_URL و STT_API_KEY هر دو لازم‌اند و نشانی باید https باشد؛ فعلاً خاموش.');
     const s = await sttStatus();
     if (s.available) {
       const cfg = await sttConfig();
