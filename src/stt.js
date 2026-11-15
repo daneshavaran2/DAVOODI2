@@ -420,10 +420,10 @@ export async function transcribe(wav, cfg, { onStart } = {}) {
     onStart?.();
     const t0 = Date.now();
     try {
-      const raw = await cloudTranscribe(wav, { prompt: cfg.prompt, language: cfg.language }, cloud);
+      const { text: raw, model } = await cloudTranscribe(wav, { prompt: cfg.prompt, language: cfg.language }, cloud);
       const ms = Date.now() - t0;
-      record(info, ms, 'cloud', null, cloud.host);
-      return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms, seconds: info.seconds, via: 'cloud' };
+      record(info, ms, 'cloud', null, `${cloud.host}، ${model}`);
+      return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms, seconds: info.seconds, via: 'cloud', model };
     } catch (e) {
       console.error(`تبدیل گفتار ابری: ${e.message} این بار با whisper خود سرور.`);
     }
@@ -468,7 +468,7 @@ export async function transcribe(wav, cfg, { onStart } = {}) {
     }
     const ms = Date.now() - t0;
     record(info, ms, via, cfg.threads);
-    return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms, seconds: info.seconds, via };
+    return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms, seconds: info.seconds, via, model: nameOf(cfg.model) };
   } finally {
     release();
     if (dir) await rm(dir, { recursive: true, force: true });

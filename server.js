@@ -147,7 +147,7 @@ function startJob(wav) {
   const job = { id, state: 'queued', created: Date.now() };
   jobs.set(id, job);
   job.done = transcribe(wav, undefined, { onStart: () => Object.assign(job, { state: 'running', started: Date.now() }) })
-    .then((r) => Object.assign(job, { state: 'done', text: r.text, ms: r.ms, seconds: r.seconds }))
+    .then((r) => Object.assign(job, { state: 'done', text: r.text, raw: r.raw, ms: r.ms, seconds: r.seconds, via: r.via, model: r.model }))
     .catch((e) => Object.assign(job, { state: 'error', error: e instanceof SttError ? e.message : 'تبدیل گفتار به متن ممکن نشد.' }))
     .finally(() => setTimeout(() => jobs.delete(id), JOB_TTL_MS).unref());
   return job;
@@ -163,8 +163,8 @@ async function waitForJob(job, waitS) {
 }
 
 function jobView(job) {
-  const { state, text, error, ms, seconds } = job;
-  return { job: job.id, state, text, error, ms, seconds, waitedMs: Date.now() - job.created, estimateMs: estimateMs() };
+  const { state, text, raw, error, ms, seconds, via, model } = job;
+  return { job: job.id, state, text, raw, error, ms, seconds, via, model, waitedMs: Date.now() - job.created, estimateMs: estimateMs() };
 }
 
 const faNum = (v) => String(v ?? '').replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
@@ -181,9 +181,16 @@ async function statusPage() {
     'تبدیل گفتار ابری (سریع، برای آیفون)',
     !c.configured
       ? 'تنظیم نشده (STT_API_URL و STT_API_KEY)'
-      : `${c.usable ? 'روشن' : 'موقتاً کنار گذاشته شده'} — ${c.host}، ${c.model}؛ موفق ${faNum(c.ok)}، ناموفق ${faNum(c.failed)}` +
+      : `${c.usable ? 'روشن' : 'موقتاً کنار گذاشته شده'} — ${c.host}؛ موفق ${faNum(c.ok)}، ناموفق ${faNum(c.failed)}` +
+        (c.lastModel ? `؛ آخرین جواب از ${c.lastModel}` : '') +
         (c.lastError ? `؛ آخرین خطا: ${c.lastError}` : ''),
   ]);
+  for (const m of c.models || []) {
+    rows.push([
+      `مدل ابری ${faNum((c.models.indexOf(m) + 1))}`,
+      `${m.id} (${m.kind === 'chat' ? 'گفت‌وگوی صوتی، با فهرست نام خودروها' : 'تبدیل گفتار'})${m.skipped ? ' — موقتاً کنار گذاشته شده' : ''}${m.lastError ? `؛ خطا: ${m.lastError}` : ''}`,
+    ]);
+  }
   const localOn = stt.server && (stt.local === undefined || stt.local === 'ready');
   rows.push(['تبدیل گفتار روی خود سرور', localOn ? 'روشن' : `خاموش${stt.reason ? ` — ${stt.reason}` : typeof stt.local === 'string' && stt.local !== 'off' ? ` — ${stt.local}` : ''}`]);
   if (stt.download) rows.push(['آماده شدن مدل', `${stt.download.state} ${faNum(stt.download.percent ?? '')}٪`]);
@@ -307,7 +314,7 @@ async function handle(req, res) {
           return send(res, finished ? 200 : 202, jobView(job), { 'Cache-Control': 'no-store' });
         }
         const r = await transcribe(wav);
-        return send(res, 200, { text: r.text, ms: r.ms, seconds: r.seconds }, { 'Cache-Control': 'no-store' });
+        return send(res, 200, { text: r.text, raw: r.raw, ms: r.ms, seconds: r.seconds, via: r.via, model: r.model }, { 'Cache-Control': 'no-store' });
       } catch (e) {
         if (e instanceof SttError) return send(res, e.status, { error: e.message });
         throw e;

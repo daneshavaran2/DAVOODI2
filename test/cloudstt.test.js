@@ -25,6 +25,21 @@ const fake = http.createServer((req, res) => {
   req.setEncoding('latin1');
   req.on('data', (d) => (body += d));
   req.on('end', () => {
+    if (req.url.endsWith('/chat/completions')) {
+      const j = JSON.parse(Buffer.from(body, 'latin1').toString('utf8'));
+      const audio = j.messages[1].content.find((p) => p.type === 'input_audio')?.input_audio;
+      seen.push({ path: req.url, auth: req.headers.authorization, model: j.model, system: j.messages[0].content, audioFormat: audio?.format, audioBytes: audio ? Buffer.from(audio.data, 'base64').length : 0, reasoning: j.reasoning });
+      if (j.model === 'no/such-model') {
+        res.statusCode = 404;
+        return res.end(JSON.stringify({ error: { message: 'model not found' } }));
+      }
+      if (mode === 'no-reasoning' && j.reasoning) {
+        res.statusCode = 400;
+        return res.end(JSON.stringify({ error: { message: 'reasoning is not supported' } }));
+      }
+      res.setHeader('content-type', 'application/json');
+      return res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: mode === 'chat-silent' ? '' : '«قیمت کیا سراتو مدل ۹۸»\n' } }] }));
+    }
     const field = (n) => Buffer.from((body.match(new RegExp(`name="${n}"\\r\\n\\r\\n([^\\r]*)`)) || [])[1] || '', 'latin1').toString('utf8');
     seen.push({ path: req.url, auth: req.headers.authorization, model: field('model'), language: field('language'), prompt: field('prompt'), hasFile: /name="file"; filename="audio.wav"/.test(body) });
     if (mode === 'slow') return setTimeout(() => res.end('{"text":"دیر"}'), 2000);
@@ -48,7 +63,7 @@ const fake = http.createServer((req, res) => {
 await new Promise((r) => fake.listen(0, '127.0.0.1', r));
 const BASE = `http://127.0.0.1:${fake.address().port}/api/ws-123/v1`;
 
-const { cloudConfig, cloudStatus, _resetCloud } = await import('../src/cloudstt.js');
+const { cloudConfig, cloudStatus, cleanChatText, isTranscriptionModel, _resetCloud } = await import('../src/cloudstt.js');
 const stt = await import('../src/stt.js');
 
 function wav(seconds) {
@@ -81,13 +96,18 @@ function noCloud() {
 }
 
 test('cloudConfig: نشانی لیارا، مدل پیش‌فرض، و رد نشانی بی‌کلید یا http بیرونی', () => {
-  const liara = cloudConfig({ STT_API_URL: 'https://ai.liara.ir/api/abc123/v1', STT_API_KEY: 'k' });
-  assert.equal(liara.url, 'https://ai.liara.ir/api/abc123/v1/audio/transcriptions');
+  const liara = cloudConfig({ STT_API_URL: 'https://ai.liara.ir/api/abc123/v1/', STT_API_KEY: 'k' });
+  assert.equal(liara.base, 'https://ai.liara.ir/api/abc123/v1');
   assert.equal(liara.model, 'openai/whisper-1');
+  assert.deepEqual(liara.models, ['openai/whisper-1']);
   assert.equal(liara.host, 'ai.liara.ir');
-  const full = cloudConfig({ STT_API_URL: 'https://api.example.com/v1/audio/transcriptions', STT_API_KEY: 'k', STT_API_MODEL: 'gpt-4o-mini-transcribe' });
-  assert.equal(full.url, 'https://api.example.com/v1/audio/transcriptions');
-  assert.equal(full.model, 'gpt-4o-mini-transcribe');
+  const full = cloudConfig({ STT_API_URL: 'https://api.example.com/v1/audio/transcriptions', STT_API_KEY: 'k', STT_API_MODEL: ' google/gemini-2.5-flash , microsoft/mai-transcribe-2 ' });
+  assert.equal(full.base, 'https://api.example.com/v1');
+  assert.deepEqual(full.models, ['google/gemini-2.5-flash', 'microsoft/mai-transcribe-2']);
+  assert.equal(full.model, 'google/gemini-2.5-flash');
+  assert.equal(isTranscriptionModel('microsoft/mai-transcribe-2'), true);
+  assert.equal(isTranscriptionModel('openai/whisper-large-v3'), true);
+  assert.equal(isTranscriptionModel('google/gemini-2.5-flash'), false);
   assert.equal(cloudConfig({ STT_API_URL: 'https://api.example.com/v1', STT_API_KEY: 'k' }).model, 'whisper-1');
   assert.equal(cloudConfig({ STT_API_URL: 'https://ai.liara.ir/api/abc/v1' }), null, 'بی‌کلید');
   assert.equal(cloudConfig({ STT_API_URL: 'http://ai.liara.ir/api/abc/v1', STT_API_KEY: 'k' }), null, 'http بیرونی');
@@ -144,7 +164,7 @@ test('کلید نادرست: همان صدا با whisper خود سرور، و �
   assert.equal(await cliRuns(), before + 1);
   const st = cloudStatus();
   assert.equal(st.usable, false);
-  assert.match(st.lastError, /کلید سرویس ابری پذیرفته نشد \(HTTP 401: Invalid API key\)/);
+  assert.match(st.lastError, /کلید سرویس ابری پذیرفته نشد \(whisper-1، HTTP 401: Invalid API key\)/);
   assert.ok(!JSON.stringify(st).includes(KEY), 'کلید در وضعیت نیست');
   // درخواست بعدی دیگر سراغ ابری نمی‌رود (منتظر خطای تکراری نمی‌ماند)
   await stt.transcribe(wav(2));
@@ -189,7 +209,8 @@ test('سرور: فقط با ابری (بی whisper) میکروفون روشن ا
       assert.ok(!page.includes('ws-123'), 'نشانی کامل (شناسهٔ فضای کاری) نشان داده نشد');
     }
     assert.match(status, /تبدیل گفتار ابری/);
-    assert.match(status, /روشن — 127\.0\.0\.1:\d+، whisper-1/);
+    assert.match(status, /روشن — 127\.0\.0\.1:\d+؛ موفق ۱/);
+    assert.match(status, /whisper-1 \(تبدیل گفتار\)/);
     assert.match(status, /ابری\)/, 'اجرای ابری در فهرست تبدیل‌های اخیر');
 
     // ابری خطا دهد و whisper هم نباشد: خطای روشن، نه گیر کردن
@@ -202,6 +223,65 @@ test('سرور: فقط با ابری (بی whisper) میکروفون روشن ا
     await new Promise((r) => server.close(r));
     process.env.WHISPER_BIN = BIN;
   }
+});
+
+test('مدل گفت‌وگوی صوتی (مثل Gemini): صدا با دستور «نام خودرو» و فهرست نام‌ها، و فقط خود جمله برمی‌گردد', async () => {
+  useCloud({ STT_API_MODEL: 'google/gemini-2.5-flash' });
+  seen.length = 0;
+  const r = await stt.transcribe(wav(3));
+  assert.equal(r.via, 'cloud');
+  assert.equal(r.model, 'google/gemini-2.5-flash');
+  assert.equal(r.text, 'قیمت کیا سراتو مدل ۹۸', 'گیومه و خط تازه حذف شد');
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].path, '/api/ws-123/v1/chat/completions');
+  assert.equal(seen[0].auth, `Bearer ${KEY}`);
+  assert.equal(seen[0].audioFormat, 'wav');
+  assert.equal(seen[0].audioBytes, wav(3).length, 'همهٔ صدا فرستاده شد');
+  assert.match(seen[0].system, /car-price app/);
+  assert.match(seen[0].system, /کیا سراتو/);
+  assert.deepEqual(seen[0].reasoning, { effort: 'none' });
+
+  // سکوت: متن خالی (بدون whisper خود سرور)
+  mode = 'chat-silent';
+  assert.equal((await stt.transcribe(wav(2))).text, '');
+  delete process.env.STT_API_MODEL;
+});
+
+test('مدل گفت‌وگو که «بدون فکر کردن» را نمی‌پذیرد: دوباره بدون آن', async () => {
+  useCloud({ STT_API_MODEL: 'google/gemini-2.5-pro' });
+  mode = 'no-reasoning';
+  seen.length = 0;
+  const r = await stt.transcribe(wav(3));
+  assert.equal(r.text, 'قیمت کیا سراتو مدل ۹۸');
+  assert.equal(seen.length, 2);
+  assert.equal(seen[1].reasoning, undefined);
+  delete process.env.STT_API_MODEL;
+});
+
+test('چند مدل: اگر اولی نبود (404) دومی، و اولی تا مدتی کنار می‌رود', async () => {
+  useCloud({ STT_API_MODEL: 'no/such-model,google/gemini-2.5-flash' });
+  seen.length = 0;
+  const r = await stt.transcribe(wav(3));
+  assert.equal(r.via, 'cloud');
+  assert.equal(r.model, 'google/gemini-2.5-flash');
+  assert.deepEqual(seen.map((x) => x.model), ['no/such-model', 'google/gemini-2.5-flash']);
+  const st = cloudStatus();
+  assert.equal(st.models[0].skipped, true);
+  assert.match(st.models[0].lastError, /نام مدل/);
+  assert.equal(st.models[1].kind, 'chat');
+  assert.equal(st.usable, true);
+  await stt.transcribe(wav(2));
+  assert.equal(seen.length, 3, 'دفعهٔ بعد مستقیم مدل دوم');
+  delete process.env.STT_API_MODEL;
+});
+
+test('cleanChatText: فقط خود جمله', () => {
+  assert.equal(cleanChatText('«پژو ۲۰۶ تیپ ۲»'), 'پژو ۲۰۶ تیپ ۲');
+  assert.equal(cleanChatText('Transcript: "دنا پلاس مدل ۱۴۰۱"'), 'دنا پلاس مدل ۱۴۰۱');
+  assert.equal(cleanChatText('```\nسمند سورن\n```'), 'سمند سورن');
+  assert.equal(cleanChatText('(سکوت)'), '');
+  assert.equal(cleanChatText('No speech.'), '');
+  assert.equal(cleanChatText(''), '');
 });
 
 test('بی تنظیم ابری: مثل قبل فقط whisper خود سرور', async () => {

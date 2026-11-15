@@ -96,6 +96,10 @@ export async function startRecording({ onLevel, onSpeech, maxMs = 12000, silence
   await resuming;
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
   const rate = ctx.sampleRate;
+  let trackSettings = {};
+  try {
+    trackSettings = stream.getAudioTracks()[0]?.getSettings?.() || {};
+  } catch {}
   const source = ctx.createMediaStreamSource(stream);
   const mute = ctx.createGain();
   mute.gain.value = 0;
@@ -169,8 +173,12 @@ export async function startRecording({ onLevel, onSpeech, maxMs = 12000, silence
       const to = Math.min(pcm.length, lastVoice + Math.round(rate * 0.4));
       pcm = pcm.subarray(from, to);
     }
+    let peak = 0;
+    for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
     const out = normalize(downsample(pcm, rate));
-    resolveDone({ wav: encodeWav(out), seconds: out.length / TARGET_RATE, hadSpeech: speechStart !== null });
+    // برای حالت عیب‌یابی (?debug=1): نرخ نمونه‌برداری واقعی میکروفون و بلندی صدا
+    const info = { contextRate: rate, trackRate: trackSettings.sampleRate || null, channels: trackSettings.channelCount || null, peak: Math.round(peak * 1000) / 1000, recordedSeconds: total / rate };
+    resolveDone({ wav: encodeWav(out), seconds: out.length / TARGET_RATE, hadSpeech: speechStart !== null, info });
   }
 
   return { stop: finish, done };

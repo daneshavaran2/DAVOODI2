@@ -210,24 +210,68 @@ async function startServerVoice() {
     setStatus(micErrorMessage(e), true);
     return;
   }
-  const { wav, hadSpeech } = await recording.done;
+  const { wav, hadSpeech, info } = await recording.done;
   recording = null;
   setListening(false);
   if (!hadSpeech) {
     setStatus('صدایی شنیده نشد؛ دوباره روی میکروفون بزنید و کمی بلندتر بگویید.', true);
+    if (DEBUG) showVoiceDebug(wav, info, null, 'صدایی تشخیص داده نشد');
     return;
   }
   setBusy(true);
   setStatus('در حال تبدیل گفتار به متن…');
+  const t0 = Date.now();
   try {
     const data = await serverTranscribe(wav);
+    if (DEBUG) showVoiceDebug(wav, info, { ...data, totalMs: Date.now() - t0 });
     if (!data.text) setStatus('متوجه نشدم؛ لطفاً دوباره و شمرده‌تر بگویید.', true);
     else heard(data.text);
   } catch (e) {
+    if (DEBUG) showVoiceDebug(wav, info, null, e.message);
     setStatus(e.message || 'تبدیل گفتار به متن ممکن نشد.', true);
     if (e.typeInstead) input.focus();
   } finally {
     setBusy(false);
+  }
+}
+
+// حالت عیب‌یابی صدا (نشانی با ‎?debug=1‎): صدای دقیقی که فرستاده شد پخش می‌شود و جزئیات آن دیده می‌شود.
+// فقط روی همین گوشی است؛ چیزی جایی ذخیره نمی‌شود.
+const DEBUG = new URLSearchParams(location.search).has('debug');
+let debugUrl = null;
+function showVoiceDebug(wav, info = {}, data, error) {
+  let box = document.getElementById('voiceDebug');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'voiceDebug';
+    box.dir = 'rtl';
+    box.style.cssText = 'margin:12px 0;padding:12px;border:1px dashed currentColor;border-radius:12px;font-size:15px;line-height:1.9;text-align:start';
+    micStatus.insertAdjacentElement('afterend', box);
+  }
+  if (debugUrl) URL.revokeObjectURL(debugUrl);
+  debugUrl = URL.createObjectURL(wav);
+  const sec = (ms) => (ms == null ? '—' : `${fa((ms / 1000).toFixed(1))} ثانیه`);
+  const rows = [
+    ['صدای فرستاده‌شده', `${fa((info.recordedSeconds ?? 0).toFixed(1))} ثانیه ضبط، ${fa(((wav.size - 44) / 32000).toFixed(1))} ثانیه فرستاده شد`],
+    ['نرخ میکروفون', `${fa(info.contextRate ?? '—')} هرتز (track: ${fa(info.trackRate ?? '—')}، کانال: ${fa(info.channels ?? '—')})`],
+    ['بلندترین صدا', fa(info.peak ?? '—')],
+    ['متن خام', data ? `«${data.raw ?? data.text ?? ''}»` : '—'],
+    ['تبدیل با', data ? `${data.via === 'cloud' ? 'ابری' : data.via === 'server' ? 'whisper-server' : data.via || '—'}${data.model ? ` (${data.model})` : ''}` : '—'],
+    ['زمان', data ? `${sec(data.ms)} روی سرور، ${sec(data.totalMs)} کل` : '—'],
+  ];
+  if (error) rows.push(['خطا', error]);
+  box.replaceChildren();
+  const title = document.createElement('strong');
+  title.textContent = 'عیب‌یابی صدا';
+  const audio = document.createElement('audio');
+  audio.controls = true;
+  audio.src = debugUrl;
+  audio.style.cssText = 'width:100%;margin:8px 0';
+  box.append(title, audio);
+  for (const [k, v] of rows) {
+    const line = document.createElement('div');
+    line.textContent = `${k}: ${v}`;
+    box.append(line);
   }
 }
 
