@@ -105,11 +105,11 @@ test('WHISPER_MODEL_NAME=none: هیچ دانلودی نیست', async () => {
   assert.equal(await ensureModel({ env: { WHISPER_MODEL_NAME: 'none' }, modelsDir: dir, log: quiet }), 'skipped');
 });
 
-test('در کانتینر بدون دیسک (WHISPER_REQUIRE_DISK=1) مدل دانلود نمی‌شود', async (t) => {
+test('در کانتینر بدون دیسک و بدون جای خالی کافی (WHISPER_REQUIRE_DISK=1) مدل دانلود نمی‌شود', async (t) => {
   const { srv, seen, url } = await startServer();
   t.after(() => srv.close());
   const dir = await mkdtemp(join(tmpdir(), 'model-'));
-  const env = baseEnv(url, { WHISPER_REQUIRE_DISK: '1' });
+  const env = baseEnv(url, { WHISPER_REQUIRE_DISK: '1', WHISPER_MIN_FREE_MB: String(1e9) });
   assert.equal(await ensureModel({ env, modelsDir: dir, log: quiet }), 'skipped');
   assert.equal(seen.length, 0);
   assert.match(download.error, /دیسک/);
@@ -127,4 +127,21 @@ test('isMountPoint: تشخیص دیسک وصل‌شده از روی mountinfo', 
   assert.equal(await isMountPoint(dir, info), true);
   assert.equal(await isMountPoint(tmpdir(), info), false);
   assert.equal(await isMountPoint(dir, join(dir, 'missing')), false);
+});
+
+test('بدون دیسک ولی با جای خالی کافی: دانلود می‌شود', async (t) => {
+  const { srv, url } = await startServer();
+  t.after(() => srv.close());
+  const dir = await mkdtemp(join(tmpdir(), 'model-'));
+  assert.equal(await ensureModel({ env: baseEnv(url, { WHISPER_REQUIRE_DISK: '1', WHISPER_MIN_FREE_MB: '1' }), modelsDir: dir, log: quiet }), 'ready');
+});
+
+test('نشانی اول کار نکرد: نشانی بعدی (آینه)', async (t) => {
+  const { srv, seen, url } = await startServer();
+  t.after(() => srv.close());
+  const dir = await mkdtemp(join(tmpdir(), 'model-'));
+  const env = baseEnv(`http://127.0.0.1:9/blocked.bin,${url}`);
+  assert.equal(await ensureModel({ env, modelsDir: dir, log: quiet }), 'ready');
+  assert.equal(seen.length, 1, 'از نشانی دوم یک بار');
+  assert.deepEqual(await readFile(join(dir, 'ggml-tiny-q8_0.bin')), MODEL);
 });

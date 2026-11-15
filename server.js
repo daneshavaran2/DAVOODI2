@@ -118,10 +118,13 @@ async function sttInfo({ detail = false } = {}) {
     };
   }
   if (DEMO) return { server: true, model: 'demo', demo: true };
-  // چرا تشخیص گفتار سرور فعال نیست (برای /api/health و عیب‌یابی)
+  // چرا تشخیص گفتار سرور فعال نیست (برای صفحه، /api/health و عیب‌یابی)
+  const preparing = ['downloading', 'verifying'].includes(download.state);
   return {
     server: false,
-    reason: s.disabledReason || download.error || null,
+    reason: preparing
+      ? null
+      : download.error || s.disabledReason || (!s.bin ? 'whisper روی سرور نصب نیست.' : !s.model ? 'مدل تشخیص گفتار روی سرور نیست.' : null),
     download: download.state === 'idle' ? undefined : { state: download.state, model: download.model, percent: download.percent },
   };
 }
@@ -390,9 +393,9 @@ if (isMain) {
       startPersistent(cfg).catch((e) => console.error('whisper-server:', e.message));
       return;
     }
-    if (s.bin && !s.model && !DEMO && !s.disabledReason) {
-      // whisper هست ولی مدل نه (مثلاً اولین اجرای کانتینر): دانلود در پس‌زمینه
-      console.log('تشخیص گفتار روی سرور: مدل هنوز نیست؛ تا وقتی آماده شود، تشخیص گفتار مرورگر استفاده می‌شود.');
+    if (s.bin && !DEMO && !/Illegal instruction/.test(s.disabledReason || '')) {
+      // whisper هست ولی مدلِ مناسب حافظه نه (مثلاً مدل داخل تصویر نیست، یا بزرگ‌تر از حافظهٔ پلن است): دانلود در پس‌زمینه
+      console.log(`تشخیص گفتار روی سرور: هنوز آماده نیست (${s.disabledReason || 'مدل نیست'})؛ مدل مناسب آماده می‌شود.`);
       ensureModel()
         .then(async (state) => state === 'ready' && (await sttStatus()).available && startPersistent())
         .catch((e) => console.error('دانلود مدل:', e));

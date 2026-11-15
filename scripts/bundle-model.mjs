@@ -23,7 +23,9 @@ if (!name || name === 'none') {
   console.log('مدلی داخل تصویر گذاشته نمی‌شود.');
   process.exit(0);
 }
-const url = process.env.WHISPER_MODEL_URL || `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${name}.bin`;
+const urls = process.env.WHISPER_MODEL_URL
+  ? process.env.WHISPER_MODEL_URL.split(',').map((u) => u.trim())
+  : [`https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${name}.bin`, `https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-${name}.bin`];
 const dest = `${dir}/ggml-${name}.bin`;
 const expected = process.env.WHISPER_MODEL_SHA256 ?? SHA256[name] ?? '';
 
@@ -45,7 +47,7 @@ function get(target, redirects = 5) {
   });
 }
 
-async function once() {
+async function once(url) {
   const res = await get(url);
   res.setTimeout(30_000, () => res.destroy(new Error('۳۰ ثانیه بدون داده')));
   const hash = createHash('sha256');
@@ -70,14 +72,15 @@ if (await stat(dest).then(() => true, () => false)) {
   process.exit(0);
 }
 const t0 = Date.now();
-for (let attempt = 1; attempt <= 3; attempt++) {
+for (let attempt = 1; attempt <= 3 * urls.length; attempt++) {
+  const url = urls[Math.floor((attempt - 1) / 3)];
   try {
-    const bytes = await once();
+    const bytes = await once(url);
     console.log(`مدل ${name} داخل تصویر گذاشته شد (${Math.round(bytes / 2 ** 20)} مگابایت، ${Math.round((Date.now() - t0) / 1000)} ثانیه).`);
     process.exit(0);
   } catch (e) {
     await rm(`${dest}.part`, { force: true });
-    console.log(`دانلود مدل ممکن نشد (${e.message})؛ تلاش ${attempt} از ۳`);
+    console.log(`دانلود مدل از ${new URL(url).host} ممکن نشد (${e.message})؛ تلاش ${attempt} از ${3 * urls.length}`);
   }
 }
 console.log('مدل داخل تصویر گذاشته نشد؛ ساخت ادامه می‌یابد و برنامه هنگام اجرا تصمیم می‌گیرد.');

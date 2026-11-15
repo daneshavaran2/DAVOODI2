@@ -65,7 +65,37 @@ test('حافظهٔ خیلی کم: خاموش، با پیام کمترین حاف
   assert.match(r.status.disabledReason, /900 مگابایت/);
 });
 
-test('مدل دیگری صریحاً خواسته شده: بدون دیسک دانلود نمی‌شود، حتی اگر مدل داخل تصویر باشد', async () => {
-  const env = { WHISPER_BIN: BIN, WHISPER_MEMORY_LIMIT_MB: '2048', WHISPER_REQUIRE_DISK: '1', WHISPER_MODEL_NAME: 'large-v3-turbo', WHISPER_MODEL_URL: 'http://127.0.0.1:9/never' };
+test('مدل دیگری صریحاً خواسته شده: بدون دیسک و جای خالی دانلود نمی‌شود، حتی اگر مدل داخل تصویر باشد', async () => {
+  const env = { WHISPER_BIN: BIN, WHISPER_MEMORY_LIMIT_MB: '2048', WHISPER_REQUIRE_DISK: '1', WHISPER_MIN_FREE_MB: String(1e9), WHISPER_MODEL_NAME: 'large-v3-turbo', WHISPER_MODEL_URL: 'http://127.0.0.1:9/never' };
   assert.equal(await ensureModel({ env, modelsDir: join(root, 'other'), log: quiet }), 'skipped');
+});
+
+test('مدل داخل تصویر بزرگ‌تر از حافظه است (q8 با ۱ گیگابایت): مدل کوچک‌تر (q5) دانلود می‌شود', async (t) => {
+  const http = await import('node:http');
+  const { createHash } = await import('node:crypto');
+  const body = Buffer.from('q5-model-bytes');
+  const asked = [];
+  const srv = http.createServer((req, res) => {
+    asked.push(req.url);
+    res.end(body);
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  t.after(() => srv.close());
+  // فقط q8 داخل تصویر است
+  const { rm } = await import('node:fs/promises');
+  await rm(join(bundled, 'ggml-large-v3-turbo-q5_0.bin'), { force: true });
+  await writeFile(join(bundled, 'ggml-large-v3-turbo-q8_0.bin'), 'x');
+  const env = {
+    WHISPER_BIN: BIN,
+    WHISPER_MEMORY_LIMIT_MB: '1024',
+    WHISPER_REQUIRE_DISK: '1',
+    WHISPER_MIN_FREE_MB: '1',
+    WHISPER_MODEL_URL: `http://127.0.0.1:${srv.address().port}/ggml-q5.bin`,
+    WHISPER_MODEL_SHA256: createHash('sha256').update(body).digest('hex'),
+  };
+  assert.equal(await ensureModel({ env, log: quiet }), 'ready');
+  assert.equal(asked.length, 1);
+  const r = await pick(1024);
+  assert.equal(r.file, 'ggml-large-v3-turbo-q5_0.bin');
+  assert.equal(r.status.available, true);
 });

@@ -130,8 +130,45 @@ function setupVoice() {
     return;
   }
   if (IS_IOS && IN_APP) return disableMic('میکروفون در مرورگرِ داخل این برنامه کار نمی‌کند. سایت را در سافاری باز کنید، یا نام خودرو را بنویسید.');
-  if (IS_IOS) return disableMic('روی آیفون، گفتار فارسی روی سرور به متن تبدیل می‌شود که الان روشن نیست. لطفاً نام خودرو را بنویسید.');
+  if (IS_IOS || canRecord()) {
+    // تبدیل گفتار روی سرور هنوز آماده نیست: دلیل یا پیشرفت آماده شدن را بگو، و بعداً دوباره بپرس
+    const d = config.stt?.download;
+    const preparing = d && ['downloading', 'verifying'].includes(d.state);
+    if (preparing) {
+      watchStt();
+      return disableMic(`تبدیل گفتار روی سرور در حال آماده شدن است${d.percent ? ` (${fa(d.percent)}٪)` : ''}؛ چند دقیقه دیگر میکروفون خودش روشن می‌شود. فعلاً نام خودرو را بنویسید.`);
+    }
+    const why = config.stt?.reason ? ` (${config.stt.reason})` : '';
+    return disableMic(`تبدیل گفتار روی سرور الان روشن نیست${why}. لطفاً نام خودرو را بنویسید.`);
+  }
   return disableMic('این مرورگر از ضبط صدا پشتیبانی نمی‌کند. لطفاً نام خودرو را بنویسید.');
+}
+
+/** هر ۱۵ ثانیه وضعیت تشخیص گفتار سرور را می‌پرسد؛ وقتی آماده شد، میکروفون روشن می‌شود */
+let sttWatch = null;
+function watchStt() {
+  if (sttWatch) return;
+  sttWatch = setInterval(async () => {
+    const c = await fetch('/api/config', { cache: 'no-store' }).then((r) => r.json(), () => null);
+    if (!c) return;
+    config = c;
+    const d = c.stt?.download;
+    if (c.stt?.server) {
+      clearInterval(sttWatch);
+      sttWatch = null;
+      micUnavailable = null;
+      micBtn.classList.remove('unavailable');
+      setupVoice();
+      setStatus('تبدیل گفتار آماده شد؛ دکمه را بزنید و بگویید.');
+    } else if (d && ['downloading', 'verifying'].includes(d.state)) {
+      micUnavailable = `تبدیل گفتار روی سرور در حال آماده شدن است${d.percent ? ` (${fa(d.percent)}٪)` : ''}؛ چند دقیقه دیگر میکروفون خودش روشن می‌شود. فعلاً نام خودرو را بنویسید.`;
+      if (!results.childElementCount) setStatus(micUnavailable);
+    } else {
+      clearInterval(sttWatch);
+      sttWatch = null;
+      setupVoice();
+    }
+  }, 15_000);
 }
 
 function heard(text) {
