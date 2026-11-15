@@ -26,8 +26,13 @@ const AUTH_PAUSE_MS = 10 * 60_000;
 // مدلی که درخواست را نپذیرفت (نام نادرست، ورودی صوتی ندارد، …) تا این مدت کنار می‌رود و مدل بعدی به کار می‌رود
 const MODEL_SKIP_MS = 10 * 60_000;
 
-/** مدل تبدیل گفتار (‎/audio/transcriptions‎) یا مدل گفت‌وگو با ورودی صوتی (‎/chat/completions‎) */
-export const isTranscriptionModel = (id) => /whisper|transcri|speech|stt|asr|scribe/i.test(id);
+// مدل گفت‌وگو با ورودی صوتی (‎/chat/completions‎): خانواده‌های شناخته‌شده، یا هر شناسه با پیشوند «chat:».
+// بقیه (whisper، chirp، mai-transcribe، voxtral-…-stt، qwen3-asr، …) مدل تبدیل گفتار (‎/audio/transcriptions‎) حساب می‌شوند.
+const CHAT_FAMILIES = /gemini|gpt-4o-audio|gpt-audio|audio-preview|omni|mimo|claude|llama/i;
+export const isChatModel = (id) => /^chat:/i.test(id) || (!/transcri|whisper|stt|asr|chirp/i.test(id) && CHAT_FAMILIES.test(id));
+export const isTranscriptionModel = (id) => !isChatModel(id);
+/** شناسه‌ای که به سرویس فرستاده می‌شود (بدون پیشوند chat:) */
+const apiModel = (id) => id.replace(/^chat:/i, '');
 
 /** تنظیمات سرویس ابری یا null اگر تنظیم نشده یا نادرست است */
 export function cloudConfig(env = process.env) {
@@ -79,7 +84,7 @@ export function cloudStatus(cfg = cloudConfig()) {
     model: cfg.model,
     models: cfg.models.map((id) => {
       const m = perModel.get(id);
-      return { id, kind: isTranscriptionModel(id) ? 'transcription' : 'chat', skipped: !!m && m.skipUntil > now, lastError: m?.lastError || null };
+      return { id, kind: isChatModel(id) ? 'chat' : 'transcription', skipped: !!m && m.skipUntil > now, lastError: m?.lastError || null };
     }),
     usable: cloudUsable(cfg),
     ok: state.ok,
@@ -163,7 +168,7 @@ async function viaTranscriptions(wav, id, opts, cfg, timeoutMs) {
   for (;;) {
     const fd = new FormData();
     fd.append('file', new Blob([wav], { type: 'audio/wav' }), 'audio.wav');
-    fd.append('model', id);
+    fd.append('model', apiModel(id));
     for (const [k, v] of Object.entries(TRANSCRIBE_LEVELS[m.level](opts))) fd.append(k, v);
     const r = await request(`${cfg.base}/audio/transcriptions`, cfg, { body: fd }, timeoutMs);
     if (badRequest(r.res.status) && m.level < TRANSCRIBE_LEVELS.length - 1) {
@@ -219,7 +224,7 @@ async function viaChat(wav, id, opts, cfg, timeoutMs) {
   const audio = Buffer.from(wav).toString('base64');
   for (;;) {
     const payload = {
-      model: id,
+      model: apiModel(id),
       messages: [
         { role: 'system', content: CHAT_INSTRUCTIONS },
         {
@@ -262,7 +267,7 @@ export async function cloudTranscribe(wav, { prompt = '', language = 'fa' } = {}
     const left = deadline - Date.now();
     if (last && left < 1000) break; // مدل بعدی فقط اگر هنوز وقت هست
     try {
-      const fn = isTranscriptionModel(id) ? viaTranscriptions : viaChat;
+      const fn = isChatModel(id) ? viaChat : viaTranscriptions;
       const text = await fn(wav, id, { prompt, language }, cfg, left);
       m.lastError = null;
       state.ok++;
@@ -281,4 +286,42 @@ export async function cloudTranscribe(wav, { prompt = '', language = 'fa' } = {}
   }
   const earlier = cfg.models.map((id) => perModel.get(id)?.lastError).find(Boolean);
   throw fail(last?.message || `مدل‌های ابری پس از خطا چند دقیقه کنار گذاشته شده‌اند؛ آخرین خطا: ${earlier || '—'}`);
+}
+
+// مدل‌های تبدیل گفتار لیارا که در مقایسه (حالت عیب‌یابی) کنار مدل‌های تنظیم‌شده امتحان می‌شوند
+export const LIARA_COMPARE_MODELS = [
+  'google/chirp-3',
+  'openai/gpt-transcribe',
+  'microsoft/mai-transcribe-2',
+  'openai/whisper-large-v3',
+  'mistralai/voxtral-small-24b-2507-stt',
+  'x-ai/grok-stt-1.0',
+  'meta/muse-voice-transcribe-1.0',
+  'fish-audio/transcribe-1',
+];
+
+/**
+ * مقایسه (حالت عیب‌یابی): همان صدا هم‌زمان به مدل‌های STT_API_MODEL و (برای لیارا) مدل‌های بالا، روی‌هم دست‌کم ۸ تا،
+ * فرستاده می‌شود تا صاحب
+ * برنامه ببیند کدام برای صدای خودش درست‌تر است. شمارنده‌ها و مکث پس از خطا را تغییر نمی‌دهد.
+ * خروجی: [{ model, kind, raw, ms, error }]
+ */
+export async function cloudCompare(wav, { prompt = '', language = 'fa' } = {}, cfg = cloudConfig()) {
+  if (!cfg) throw new CloudSttError('سرویس ابری تنظیم نشده است.');
+  const extra = /(^|\.)liara\.ir$/.test(cfg.host.replace(/:\d+$/, '')) ? LIARA_COMPARE_MODELS : [];
+  const ids = [...new Set([...cfg.models, ...extra])].slice(0, Math.max(8, cfg.models.length));
+  return Promise.all(
+    ids.map(async (id) => {
+      const t0 = Date.now();
+      const kind = isChatModel(id) ? 'chat' : 'transcription';
+      try {
+        const fn = kind === 'chat' ? viaChat : viaTranscriptions;
+        const raw = await fn(wav, id, { prompt, language }, cfg, cfg.timeoutMs);
+        return { model: id, kind, raw, ms: Date.now() - t0, error: null };
+      } catch (e) {
+        if (!(e instanceof ModelError)) throw e;
+        return { model: id, kind, raw: null, ms: Date.now() - t0, error: e.message };
+      }
+    }),
+  );
 }

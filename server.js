@@ -17,8 +17,8 @@ import { lookupAll, SOURCES } from './src/lookup.js';
 import { CITIES, DEFAULT_CITIES } from './src/sources/divar.js';
 import { diagnose } from './src/diagnose.js';
 import { findRivals } from './src/rivals.js';
-import { cloudConfig, cloudStatus } from './src/cloudstt.js';
-import { estimateMs, LIMITS, parseWav, persistentStatus, recentRuns, startPersistent, stopPersistent, SttError, sttConfig, sttStatus, transcribe } from './src/stt.js';
+import { cloudCompare, cloudConfig, cloudStatus } from './src/cloudstt.js';
+import { cleanTranscript, estimateMs, LIMITS, parseWav, persistentStatus, recentRuns, startPersistent, stopPersistent, SttError, sttConfig, sttStatus, transcribe } from './src/stt.js';
 import { cpuInfo, cpuLimit } from './src/memory.js';
 import { download, ensureModel } from './src/model.js';
 
@@ -284,6 +284,31 @@ async function handle(req, res) {
   }
   try {
     const url = new URL(req.url, 'http://localhost');
+    // مقایسهٔ مدل‌های ابری با یک صدا (صفحه با ‎?debug=1‎): برای انتخاب دقیق‌ترین مدل
+    if (url.pathname === '/api/transcribe/compare') {
+      if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' }, { Allow: 'POST' });
+      if (!allowed(clientIp(req))) {
+        return send(res, 429, { error: 'تعداد درخواست‌ها زیاد است؛ یک دقیقه صبر کنید.' }, { 'Retry-After': '60' });
+      }
+      try {
+        const wav = await readBody(req, LIMITS.maxBytes);
+        const info = parseWav(wav);
+        if (info.seconds < LIMITS.minSeconds || info.seconds > LIMITS.maxSeconds) throw new SttError('طول صدا مناسب نیست.');
+        const cloud = cloudConfig();
+        if (!cloud) throw new SttError('سرویس ابری تنظیم نشده است (STT_API_URL و STT_API_KEY).', 503);
+        const cfg = await sttConfig();
+        const results = await cloudCompare(wav, { prompt: cfg.prompt, language: cfg.language }, cloud);
+        return send(
+          res,
+          200,
+          { seconds: info.seconds, results: results.map((r) => ({ ...r, text: r.raw === null ? null : cleanTranscript(r.raw, cfg.prompt) })) },
+          { 'Cache-Control': 'no-store' },
+        );
+      } catch (e) {
+        if (e instanceof SttError) return send(res, e.status, { error: e.message });
+        throw e;
+      }
+    }
     if (url.pathname === '/api/transcribe') {
       if (req.method === 'GET' && url.searchParams.get('job')) {
         const job = jobs.get(url.searchParams.get('job'));

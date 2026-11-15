@@ -42,6 +42,10 @@ const fake = http.createServer((req, res) => {
     }
     const field = (n) => Buffer.from((body.match(new RegExp(`name="${n}"\\r\\n\\r\\n([^\\r]*)`)) || [])[1] || '', 'latin1').toString('utf8');
     seen.push({ path: req.url, auth: req.headers.authorization, model: field('model'), language: field('language'), prompt: field('prompt'), hasFile: /name="file"; filename="audio.wav"/.test(body) });
+    if (field('model') === 'no/such-model') {
+      res.statusCode = 404;
+      return res.end(JSON.stringify({ error: { message: 'model not found' } }));
+    }
     if (mode === 'slow') return setTimeout(() => res.end('{"text":"دیر"}'), 2000);
     // مدلی مثل mai-transcribe-2: فقط file و model و language؛ هر فیلد دیگری ← 400
     if (mode === 'strict' && /name="(prompt|temperature|response_format)"/.test(body)) {
@@ -63,7 +67,7 @@ const fake = http.createServer((req, res) => {
 await new Promise((r) => fake.listen(0, '127.0.0.1', r));
 const BASE = `http://127.0.0.1:${fake.address().port}/api/ws-123/v1`;
 
-const { cloudConfig, cloudStatus, cleanChatText, isTranscriptionModel, _resetCloud } = await import('../src/cloudstt.js');
+const { cloudConfig, cloudStatus, cleanChatText, isChatModel, isTranscriptionModel, LIARA_COMPARE_MODELS, _resetCloud } = await import('../src/cloudstt.js');
 const stt = await import('../src/stt.js');
 
 function wav(seconds) {
@@ -108,6 +112,12 @@ test('cloudConfig: نشانی لیارا، مدل پیش‌فرض، و رد نش
   assert.equal(isTranscriptionModel('microsoft/mai-transcribe-2'), true);
   assert.equal(isTranscriptionModel('openai/whisper-large-v3'), true);
   assert.equal(isTranscriptionModel('google/gemini-2.5-flash'), false);
+  // فهرست «صدا ← متن» لیارا: همه مدل تبدیل گفتارند (Chirp هم)
+  for (const id of LIARA_COMPARE_MODELS) assert.equal(isChatModel(id), false, id);
+  assert.equal(isChatModel('google/chirp-3'), false);
+  assert.equal(isChatModel('qwen/qwen3-asr-0.6b'), false);
+  assert.equal(isChatModel('openai/gpt-4o-audio-preview'), true);
+  assert.equal(isChatModel('chat:some/new-audio-model'), true);
   assert.equal(cloudConfig({ STT_API_URL: 'https://api.example.com/v1', STT_API_KEY: 'k' }).model, 'whisper-1');
   assert.equal(cloudConfig({ STT_API_URL: 'https://ai.liara.ir/api/abc/v1' }), null, 'بی‌کلید');
   assert.equal(cloudConfig({ STT_API_URL: 'http://ai.liara.ir/api/abc/v1', STT_API_KEY: 'k' }), null, 'http بیرونی');
@@ -282,6 +292,36 @@ test('cleanChatText: فقط خود جمله', () => {
   assert.equal(cleanChatText('(سکوت)'), '');
   assert.equal(cleanChatText('No speech.'), '');
   assert.equal(cleanChatText(''), '');
+});
+
+test('مقایسه: همان صدا هم‌زمان به همهٔ مدل‌ها، با متن و زمان هر کدام؛ شمارنده‌ها دست نمی‌خورند', async () => {
+  useCloud({ STT_API_MODEL: 'google/chirp-3,chat:google/gemini-2.5-flash,no/such-model' });
+  seen.length = 0;
+  const { server } = await import('../server.js');
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const res = await fetch(`${base}/api/transcribe/compare`, { method: 'POST', body: wav(3), headers: { 'content-type': 'audio/wav' } });
+    const out = await res.json();
+    assert.equal(res.status, 200);
+    assert.deepEqual(out.results.map((r) => r.model), ['google/chirp-3', 'chat:google/gemini-2.5-flash', 'no/such-model'], 'میزبان غیر لیارا: فقط مدل‌های تنظیم‌شده');
+    assert.equal(out.results[0].kind, 'transcription');
+    assert.equal(out.results[0].text, 'پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰');
+    assert.equal(out.results[1].kind, 'chat');
+    assert.equal(out.results[1].text, 'قیمت کیا سراتو مدل ۹۸');
+    assert.equal(seen.find((x) => x.path.endsWith('/chat/completions')).model, 'google/gemini-2.5-flash', 'پیشوند chat: فرستاده نشد');
+    assert.match(out.results[2].error, /نام مدل/);
+    assert.equal(cloudStatus().failed, 0);
+    assert.equal(cloudStatus().ok, 0);
+    assert.ok(!JSON.stringify(out).includes(KEY));
+    // بدون ابری: خطای روشن
+    noCloud();
+    const off = await fetch(`${base}/api/transcribe/compare`, { method: 'POST', body: wav(2), headers: { 'content-type': 'audio/wav' } });
+    assert.equal(off.status, 503);
+  } finally {
+    await new Promise((r) => server.close(r));
+    delete process.env.STT_API_MODEL;
+  }
 });
 
 test('بی تنظیم ابری: مثل قبل فقط whisper خود سرور', async () => {

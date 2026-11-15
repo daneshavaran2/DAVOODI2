@@ -7,6 +7,7 @@ const micStatus = $('#micStatus');
 const form = $('#queryForm');
 const input = $('#q');
 const results = $('#results');
+const DEBUG = new URLSearchParams(location.search).has('debug');
 
 // ---------------------------------------------------------------- قالب‌بندی
 
@@ -121,11 +122,13 @@ function setupVoice() {
   // کروم اندروید و کامپیوتر: تشخیص گفتار خود مرورگر، فوری و هم‌زمان با گفتن؛ اگر کار نکرد، سرور
   if (browserSR) {
     voiceMode = 'browser';
+    debugNote(`حالت صدا: ${VOICE_MODE_LABEL.browser}`);
     if (serverStt && canRecord()) import('/recorder.js').then((m) => (recorder = m), () => {});
     return;
   }
   if (serverStt && canRecord()) {
     voiceMode = 'server';
+    debugNote(`حالت صدا: ${VOICE_MODE_LABEL.server} — ${config.stt?.model || '—'}`);
     import('/recorder.js').then((m) => (recorder = m), () => {});
     return;
   }
@@ -237,9 +240,9 @@ async function startServerVoice() {
 
 // حالت عیب‌یابی صدا (نشانی با ‎?debug=1‎): صدای دقیقی که فرستاده شد پخش می‌شود و جزئیات آن دیده می‌شود.
 // فقط روی همین گوشی است؛ چیزی جایی ذخیره نمی‌شود.
-const DEBUG = new URLSearchParams(location.search).has('debug');
 let debugUrl = null;
-function showVoiceDebug(wav, info = {}, data, error) {
+
+function debugBox() {
   let box = document.getElementById('voiceDebug');
   if (!box) {
     box = document.createElement('div');
@@ -248,6 +251,24 @@ function showVoiceDebug(wav, info = {}, data, error) {
     box.style.cssText = 'margin:12px 0;padding:12px;border:1px dashed currentColor;border-radius:12px;font-size:15px;line-height:1.9;text-align:start';
     micStatus.insertAdjacentElement('afterend', box);
   }
+  return box;
+}
+
+const VOICE_MODE_LABEL = { browser: 'تشخیص گفتار خود مرورگر (گوگل)', server: 'ضبط روی گوشی و تبدیل روی سرور' };
+/** یک خط ساده در کادر عیب‌یابی (مثلاً حالت صدا) */
+function debugNote(text) {
+  if (!DEBUG) return;
+  const box = debugBox();
+  let line = box.querySelector('.dbg-note');
+  if (!line) {
+    line = document.createElement('div');
+    line.className = 'dbg-note';
+    box.prepend(line);
+  }
+  line.textContent = text;
+}
+function showVoiceDebug(wav, info = {}, data, error) {
+  const box = debugBox();
   if (debugUrl) URL.revokeObjectURL(debugUrl);
   debugUrl = URL.createObjectURL(wav);
   const sec = (ms) => (ms == null ? '—' : `${fa((ms / 1000).toFixed(1))} ثانیه`);
@@ -262,7 +283,7 @@ function showVoiceDebug(wav, info = {}, data, error) {
   if (error) rows.push(['خطا', error]);
   box.replaceChildren();
   const title = document.createElement('strong');
-  title.textContent = 'عیب‌یابی صدا';
+  title.textContent = `عیب‌یابی صدا — ${VOICE_MODE_LABEL[voiceMode] || voiceMode}`;
   const audio = document.createElement('audio');
   audio.controls = true;
   audio.src = debugUrl;
@@ -273,6 +294,42 @@ function showVoiceDebug(wav, info = {}, data, error) {
     line.textContent = `${k}: ${v}`;
     box.append(line);
   }
+  // همین صدا با همهٔ مدل‌های ابری: کدام درست‌تر نوشت؟
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'مقایسهٔ مدل‌ها با همین صدا';
+  btn.style.cssText = 'display:block;width:100%;margin:10px 0 4px;padding:12px;border-radius:10px;font:inherit;font-weight:700;cursor:pointer';
+  const list = document.createElement('ol');
+  list.style.cssText = 'margin:6px 0 0;padding-inline-start:22px';
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'در حال فرستادن به همهٔ مدل‌ها…';
+    list.replaceChildren();
+    try {
+      const res = await fetch('/api/transcribe/compare', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(out.error || `خطای سرور (${res.status})`);
+      for (const r of out.results) {
+        const li = document.createElement('li');
+        li.style.marginBottom = '6px';
+        const name = document.createElement('div');
+        name.dir = 'ltr';
+        name.style.cssText = 'text-align:right;opacity:.75;font-size:13px';
+        name.textContent = `${r.model} · ${fa((r.ms / 1000).toFixed(1))}s`;
+        const text = document.createElement('div');
+        text.style.fontWeight = '700';
+        text.textContent = r.error ? `خطا: ${r.error}` : `«${r.text || '(خالی)'}»`;
+        li.append(name, text);
+        list.append(li);
+      }
+      btn.textContent = 'دوباره مقایسه کن';
+    } catch (e) {
+      btn.textContent = `مقایسه ممکن نشد: ${e.message}`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  box.append(btn, list);
 }
 
 const TRANSCRIBE_MAX_MS = 180_000;
@@ -362,6 +419,7 @@ function startBrowserVoice() {
     failed = e.error !== 'aborted';
     if (!failed) return;
     // تشخیص گفتار مرورگر در دسترس نیست (مثلاً سرویس گوگل باز نمی‌شود): از این به بعد سرور
+    debugNote(`تشخیص گفتار مرورگر خطا داد: ${e.error}`);
     if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error) && config.stt?.server && canRecord()) {
       voiceMode = 'server';
       import('/recorder.js').then((m) => (recorder = m), () => {});
@@ -372,6 +430,7 @@ function startBrowserVoice() {
   rec.onend = () => {
     setListening(false);
     const text = finalText.trim() || input.value.trim();
+    if (text) debugNote(`حالت صدا: ${VOICE_MODE_LABEL.browser} — شنید: «${text}»`);
     if (text && !(failed && !finalText.trim())) heard(text);
     else if (!failed) setStatus('چیزی شنیده نشد؛ دوباره امتحان کنید.', true);
   };
