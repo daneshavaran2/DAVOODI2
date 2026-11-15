@@ -245,6 +245,17 @@ export function instrument(srv, log = console.log, limit = 10) {
   return srv;
 }
 
+/**
+ * پورت‌هایی که سکو (Kubernetes) برای سرویس‌ها در متغیرهای محیطی می‌گذارد، مثل APP_SERVICE_PORT=80.
+ * از روی آن‌ها معلوم می‌شود سکو ترافیک را به کدام پورت برنامه می‌فرستد. فقط عدد پورت ثبت می‌شود، نه چیز دیگر.
+ */
+export function servicePorts(env = process.env) {
+  return Object.entries(env)
+    .filter(([k, v]) => /_SERVICE_PORT(_[A-Z0-9_]+)?$/.test(k) && !k.startsWith('KUBERNETES_') && /^\d{1,5}$/.test(v))
+    .map(([k, v]) => `${k}=${v}`)
+    .sort();
+}
+
 /** نشانی‌های شبکهٔ کانتینر (بدون loopback)، برای اینکه در لاگ معلوم باشد IPv6 دارد یا نه */
 function networkAddresses() {
   return Object.values(os.networkInterfaces())
@@ -258,6 +269,8 @@ if (isMain) {
   instrument(server);
   const addrs = networkAddresses();
   console.log(`نشانی‌های شبکهٔ کانتینر: ${addrs.join('، ') || 'هیچ'}${addrs.some((a) => a.includes(':')) ? '' : ' (بدون IPv6)'}`);
+  const svc = servicePorts();
+  if (svc.length) console.log(`پورت سرویس در تنظیمات سکو: ${svc.join('، ')}`);
   for (const p of EXTRA_PORTS) {
     const extra = instrument(http.createServer(handle));
     extra.on('error', (e) => console.log(`پورت اضافهٔ ${p} در دسترس نیست (${e.code})؛ مهم نیست اگر سکو از پورت ${PORT} استفاده کند.`));

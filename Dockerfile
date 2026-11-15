@@ -13,10 +13,10 @@ FROM ${BASE_REGISTRY}node:22-trixie-slim
 
 # WHISPER_REQUIRE_DISK: مدل فقط وقتی خودکار دانلود می‌شود که دیسکی به /app/whisper/models وصل باشد
 # EXTRA_PORTS: علاوه بر PORT روی این پورت‌ها هم گوش می‌دهد، تا اگر سکو پورت دیگری (مثلاً پیش‌فرض 80)
-# در نظر گرفت، باز هم کار کند
+# در نظر گرفت، باز هم کار کند؛ در لاگ («اتصال رسید: پورت …») هم معلوم می‌شود کدام پورت استفاده شده است
 ENV NODE_ENV=production \
     PORT=3000 \
-    EXTRA_PORTS=80,8080 \
+    EXTRA_PORTS=80,8080,8000,5000 \
     TRUST_PROXY=1 \
     WHISPER_REQUIRE_DISK=1
 WORKDIR /app
@@ -33,6 +33,6 @@ COPY test/fixtures/market.json ./test/fixtures/market.json
 # غیر root (حتی با UID دلخواه) اجرا کند و آن وقت ساختن این پوشه هنگام اجرا ممکن نیست
 RUN mkdir -p /app/whisper/models && chmod 0777 /app/whisper/models
 
-EXPOSE 3000 80 8080
+EXPOSE 3000 80 8080 8000 5000
 # پوشهٔ مدل را برای کاربر node قابل نوشتن می‌کند (دیسک لیارا معمولاً مال root است) و برنامه را با کاربر node اجرا می‌کند
 CMD ["sh", "scripts/container-start.sh"]

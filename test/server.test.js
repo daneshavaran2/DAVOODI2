@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http, { request as httpRequest } from 'node:http';
 import net from 'node:net';
-import { instrument, server } from '../server.js';
+import { instrument, server, servicePorts } from '../server.js';
 
 function rawGet(port, path) {
   return new Promise((resolve, reject) => {
@@ -58,4 +58,17 @@ test('عیب‌یابی اتصال: اتصال‌ها و درخواست‌های
   assert.equal(bad.length, 2);
   assert.match(bad[0], /آغاز داده: "\\u0016\\u0003\\u0001/);
   assert.match(bad[1], /آغاز داده: "PROXY TCP4 10\.0\.0\.1/);
+});
+
+test('پورت سرویس سکو از متغیرهای محیطی Kubernetes خوانده می‌شود و چیز دیگری ثبت نمی‌شود', () => {
+  const env = {
+    GHEYMAT_KHODRO_SERVICE_PORT: '80',
+    GHEYMAT_KHODRO_SERVICE_PORT_HTTP: '3000',
+    GHEYMAT_KHODRO_SERVICE_HOST: '10.0.0.7',
+    KUBERNETES_SERVICE_PORT: '443',
+    SECRET_SERVICE_PORT: 'abc',
+    API_TOKEN: '12345',
+  };
+  assert.deepEqual(servicePorts(env), ['GHEYMAT_KHODRO_SERVICE_PORT=80', 'GHEYMAT_KHODRO_SERVICE_PORT_HTTP=3000']);
+  assert.deepEqual(servicePorts({}), []);
 });
