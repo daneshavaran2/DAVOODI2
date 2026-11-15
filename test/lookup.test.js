@@ -89,6 +89,6 @@ test('API سرور: /api/price و /api/config و فایل‌های ایستا', 
   assert.equal(cfg.cities['1'], 'تهران');
   const html = await fetch(`${base}/`);
   assert.equal(html.status, 200);
-  assert.match(await html.text(), /قیمت‌یاب خودرو/);
+  assert.match(await html.text(), /دستیار هوشمند خودرو داوودی/);
   assert.equal((await fetch(`${base}/nope.js`)).status, 404);
 });

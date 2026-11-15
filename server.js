@@ -382,7 +382,7 @@ if (isMain) {
   }
   server.listen(PORT, HOST, async () => {
     const a = server.address();
-    console.log(`قیمت‌یاب خودرو آماده است: روی ${where(a)} گوش می‌دهد${DEMO ? '  (حالت نمایشی — قیمت‌ها واقعی نیستند)' : ''}`);
+    console.log(`دستیار هوشمند خودرو داوودی آماده است: روی ${where(a)} گوش می‌دهد${DEMO ? '  (حالت نمایشی — قیمت‌ها واقعی نیستند)' : ''}`);
     const s = await sttStatus();
     if (s.available) {
       const cfg = await sttConfig();
