@@ -41,6 +41,7 @@ const state = { ok: 0, failed: 0, streak: 0, lastError: null, lastErrorAt: null,
 
 /** فقط برای تست */
 export function _resetCloud() {
+  level = 0;
   Object.assign(state, { ok: 0, failed: 0, streak: 0, lastError: null, lastErrorAt: null, pausedUntil: 0 });
 }
 
@@ -76,35 +77,53 @@ function fail(message, pauseMs = 0) {
   return new CloudSttError(message);
 }
 
-/** صدای WAV را به سرویس ابری می‌فرستد و متن خام را برمی‌گرداند (یا CloudSttError) */
-export async function cloudTranscribe(wav, { prompt = '', language = 'fa' } = {}, cfg = cloudConfig()) {
-  if (!cfg) throw new CloudSttError('سرویس ابری تنظیم نشده است.');
+// فیلدهای اختیاری درخواست، از کامل به ساده: بعضی مدل‌ها (مثلاً microsoft/mai-transcribe-2) فقط فایل و مدل را
+// می‌پذیرند و به فیلد ناآشنا (مثل prompt که مخصوص whisper است) خطای 400 می‌دهند. سطحی که جواب داد به خاطر سپرده می‌شود.
+const LEVELS = [
+  (o) => ({ language: o.language, response_format: 'json', temperature: '0', ...(o.prompt ? { prompt: o.prompt } : {}) }),
+  (o) => ({ language: o.language }),
+  () => ({}),
+];
+let level = 0;
+
+async function send(wav, cfg, fields) {
   const fd = new FormData();
   fd.append('file', new Blob([wav], { type: 'audio/wav' }), 'audio.wav');
   fd.append('model', cfg.model);
-  fd.append('language', language);
-  fd.append('response_format', 'json');
-  fd.append('temperature', '0');
-  if (prompt) fd.append('prompt', prompt);
-  let res;
-  let body;
+  for (const [k, v] of Object.entries(fields)) fd.append(k, v);
   try {
-    res = await fetch(cfg.url, {
+    const res = await fetch(cfg.url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${cfg.key}`, Accept: 'application/json' },
       body: fd,
       signal: AbortSignal.timeout(cfg.timeoutMs),
     });
-    body = await res.text();
+    return { res, body: await res.text() };
   } catch (e) {
     const timeout = e?.name === 'TimeoutError' || e?.name === 'AbortError';
     throw fail(timeout ? `سرویس ابری در ${+(cfg.timeoutMs / 1000).toFixed(1)} ثانیه جواب نداد.` : `اتصال به سرویس ابری ممکن نشد (${e?.cause?.code || e?.message || e}).`);
+  }
+}
+
+/** صدای WAV را به سرویس ابری می‌فرستد و متن خام را برمی‌گرداند (یا CloudSttError) */
+export async function cloudTranscribe(wav, { prompt = '', language = 'fa' } = {}, cfg = cloudConfig()) {
+  if (!cfg) throw new CloudSttError('سرویس ابری تنظیم نشده است.');
+  let res;
+  let body;
+  for (;;) {
+    ({ res, body } = await send(wav, cfg, LEVELS[level]({ prompt, language })));
+    // درخواست نامعتبر: همان صدا با فیلدهای کمتر
+    if ((res.status === 400 || res.status === 422) && level < LEVELS.length - 1) {
+      level++;
+      continue;
+    }
+    break;
   }
   let json = null;
   try {
     json = JSON.parse(body);
   } catch {
-    // بعضی سرویس‌ها با response_format=text متن ساده می‌دهند
+    // بعضی سرویس‌ها متن ساده برمی‌گردانند
   }
   if (!res.ok) {
     const detail = String(json?.error?.message || json?.error || json?.message || body || '').replace(/\s+/g, ' ').slice(0, 160);
@@ -118,10 +137,11 @@ export async function cloudTranscribe(wav, { prompt = '', language = 'fa' } = {}
             : res.status === 404
               ? 'نشانی یا نام مدل سرویس ابری درست نیست'
               : `سرویس ابری خطا داد`;
-    const pause = [401, 402, 403, 404].includes(res.status) ? AUTH_PAUSE_MS : res.status === 429 ? PAUSE_MS : 0;
+    const pause = [400, 401, 402, 403, 404, 422].includes(res.status) ? AUTH_PAUSE_MS : res.status === 429 ? PAUSE_MS : 0;
+    if (res.status === 400 || res.status === 422) level = 0; // شاید تنظیمات عوض شود؛ دفعهٔ بعد از اول
     throw fail(`${why} (HTTP ${res.status}${detail ? `: ${detail}` : ''}).`, pause);
   }
-  const text = json ? json.text : body;
+  const text = json ? (json.text ?? json.transcript ?? json.results?.[0]?.transcript) : body;
   if (typeof text !== 'string') throw fail('پاسخ سرویس ابری متن نداشت.');
   state.ok++;
   state.streak = 0;

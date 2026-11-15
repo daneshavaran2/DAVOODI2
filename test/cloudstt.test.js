@@ -28,6 +28,11 @@ const fake = http.createServer((req, res) => {
     const field = (n) => Buffer.from((body.match(new RegExp(`name="${n}"\\r\\n\\r\\n([^\\r]*)`)) || [])[1] || '', 'latin1').toString('utf8');
     seen.push({ path: req.url, auth: req.headers.authorization, model: field('model'), language: field('language'), prompt: field('prompt'), hasFile: /name="file"; filename="audio.wav"/.test(body) });
     if (mode === 'slow') return setTimeout(() => res.end('{"text":"دیر"}'), 2000);
+    // مدلی مثل mai-transcribe-2: فقط file و model و language؛ هر فیلد دیگری ← 400
+    if (mode === 'strict' && /name="(prompt|temperature|response_format)"/.test(body)) {
+      res.statusCode = 400;
+      return res.end(JSON.stringify({ error: { message: 'Unrecognized request argument supplied: prompt' } }));
+    }
     if (mode === 'unauthorized') {
       res.statusCode = 401;
       return res.end(JSON.stringify({ error: { message: 'Invalid API key' } }));
@@ -109,6 +114,23 @@ test('ابری: صدا با کلید، مدل، زبان فارسی و پرام�
   assert.equal(await cliRuns(), before, 'whisper-cli اجرا نشد');
   assert.equal(stt.recentRuns().at(-1).via, 'cloud');
   assert.ok(stt.estimateMs() !== null && stt.estimateMs() < 2000, 'زمان معمول از اجراهای ابری');
+});
+
+test('مدلی که فیلدهای اضافه را نمی‌پذیرد (400): همان صدا با فیلدهای کمتر، و دفعهٔ بعد مستقیم همان', async () => {
+  useCloud({ STT_API_MODEL: 'microsoft/mai-transcribe-2' });
+  mode = 'strict';
+  seen.length = 0;
+  const r = await stt.transcribe(wav(3));
+  assert.equal(r.via, 'cloud');
+  assert.equal(r.text, 'پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰');
+  assert.equal(seen.length, 2, 'یک بار کامل (400)، یک بار ساده');
+  assert.equal(seen[1].model, 'microsoft/mai-transcribe-2');
+  assert.equal(seen[1].language, 'fa');
+  assert.equal(seen[1].prompt, '');
+  assert.equal(cloudStatus().failed, 0, '400 اول خطا شمرده نشد');
+  await stt.transcribe(wav(2));
+  assert.equal(seen.length, 3, 'دفعهٔ بعد بی‌آزمون دوباره');
+  delete process.env.STT_API_MODEL;
 });
 
 test('کلید نادرست: همان صدا با whisper خود سرور، و ابری تا مدتی کنار گذاشته می‌شود', async () => {
