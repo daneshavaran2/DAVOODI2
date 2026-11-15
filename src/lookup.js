@@ -1,7 +1,7 @@
 // هماهنگ‌کننده: پرسش را تجزیه می‌کند، همهٔ سایت‌ها را هم‌زمان می‌پرسد و نتیجه را ترکیب می‌کند.
 
-import { aggregate } from './aggregate.js';
-import { parseQuery } from './text.js';
+import { aggregate, quantile } from './aggregate.js';
+import { parseQuery, toFaDigits } from './text.js';
 import * as bama from './sources/bama.js';
 import * as divar from './sources/divar.js';
 import * as hamrah from './sources/hamrah.js';
@@ -57,6 +57,7 @@ export async function lookupAll(raw, opts = {}) {
   }
   const canonical = await canonicalize(query);
   const results = await Promise.all(SOURCES.map((s) => runSource(s, query, { ...opts, canonical })));
+  dropUnrealPrices(results);
   const agg = aggregate(results, query);
   if (agg.summary && canonical?.level === 'brand') agg.summary.label += ` — همهٔ مدل‌های ${canonical.title}`;
   const sources = results.map((r) => {
@@ -65,6 +66,33 @@ export async function lookupAll(raw, opts = {}) {
     return { ...r, items: [...lists, ...ads.slice(0, MAX_ITEMS)], totalAds: ads.length };
   });
   return { query, canonical, hints: hintsFor(canonical), ...agg, sources };
+}
+
+// قیمت غیرواقعی: کمتر از این هیچ خودرویی نیست (آگهی با قیمت «۱»، «۱ میلیون» یا قیمت قطعه)
+export const MIN_CAR_PRICE = Number(process.env.MIN_CAR_PRICE) || 100_000_000;
+// و قیمتی که بیش از ۱۰ برابر از میانهٔ همهٔ قیمت‌های همین خودرو (همهٔ سال‌ها و سایت‌ها) کمتر یا بیشتر است
+const UNREAL_FACTOR = 10;
+
+/**
+ * قیمت‌های غیرواقعی پیش از محاسبه و نمایش کنار گذاشته می‌شوند (حذف داده‌های پرتِ هر سایت فقط با دست‌کم ۵ قیمت
+ * کار می‌کند؛ یک آگهی تنها با قیمت «۱ میلیون» از آن رد می‌شد). در هشدارهای همان سایت تعدادشان گفته می‌شود.
+ */
+export function dropUnrealPrices(results) {
+  const prices = results
+    .filter((r) => r?.ok)
+    .flatMap((r) => (r.items || []).filter((i) => i.price >= MIN_CAR_PRICE).map((i) => i.price))
+    .sort((a, b) => a - b);
+  const median = prices.length ? quantile(prices, 0.5) : null;
+  const unreal = (p) => p < MIN_CAR_PRICE || (median && (p > median * UNREAL_FACTOR || p < median / UNREAL_FACTOR));
+  for (const r of results) {
+    if (!r?.ok || !r.items?.length) continue;
+    const kept = r.items.filter((i) => !(i.price > 0) || !unreal(i.price));
+    const dropped = r.items.length - kept.length;
+    if (!dropped) continue;
+    r.items = kept;
+    r.warnings = [...(r.warnings || []), `${toFaDigits(dropped)} قیمت غیرواقعی (مثلاً «۱ میلیون») کنار گذاشته شد و در برآورد حساب نشد.`];
+  }
+  return results;
 }
 
 /** پیشنهادهای دقیق‌تر کردن جستجو وقتی کاربر فقط بخشی از نام را گفته است. */

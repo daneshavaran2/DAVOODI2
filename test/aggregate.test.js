@@ -82,3 +82,30 @@ test('سال میلادی قدیمی بدون داده با قیمت صفرِ ا
 test('«کارکرده» با سال جاری: قیمت صفر کیلومتر جایگزین نمی‌شود', () => {
   assert.equal(aggregate(results, { year: { value: 1405, calendar: 'jalali' }, condition: 'used' }, NOW).summary, null);
 });
+
+test('قیمت غیرواقعی («۱ میلیون»، یا ۱۰ برابر دورتر از میانهٔ همین خودرو) نه نمایش داده می‌شود نه حساب', async () => {
+  const { dropUnrealPrices } = await import('../src/lookup.js');
+  const { aggregate } = await import('../src/aggregate.js');
+  const B = 1e9;
+  const ad = (year, price) => ({ kind: 'ad', priceKind: 'ad', title: 'ب ام و X6', year, price, isNew: false });
+  const results = [
+    // مثل گزارش کاربر: سال ۲۰۲۳ فقط یک آگهی با «۱ میلیون»
+    { id: 'bama', name: 'باما', ok: true, items: [ad(2023, 1e6), ad(2013, 36 * B), ad(2012, 18.5 * B), ad(2011, 13 * B), ad(2011, 13.6 * B)], warnings: [] },
+    { id: 'hamrah', name: 'همراه مکانیک', ok: true, items: [ad(2024, 11.3 * B), ad(2018, 9.2 * B), ad(2017, 8.6 * B), ad(2016, 8.3 * B), { ...ad(2016, null), note: 'توافقی' }], warnings: [] },
+    { id: 'divar', name: 'دیوار', ok: true, items: [ad(2018, 9.1 * B), ad(2018, 900 * B)], warnings: [] },
+    { id: 'down', name: 'خطا', ok: false, items: [], warnings: [] },
+  ];
+  dropUnrealPrices(results);
+  const all = results.flatMap((r) => r.items.map((i) => i.price));
+  assert.ok(!all.includes(1e6), '«۱ میلیون» حذف شد');
+  assert.ok(!all.includes(900 * B), '۹۰۰ میلیارد (۱۰۰ برابر میانه) حذف شد');
+  assert.ok(all.includes(36 * B), '۳۶ میلیارد (کمتر از ۱۰ برابر میانه) می‌ماند');
+  assert.ok(all.includes(null), 'آگهی بی‌قیمت (توافقی) می‌ماند');
+  assert.match(results[0].warnings[0], /^۱ قیمت غیرواقعی/);
+  assert.match(results[2].warnings[0], /^۱ قیمت غیرواقعی/);
+  assert.equal(results[1].warnings.length, 0);
+
+  const agg = aggregate(results, { year: null, condition: 'used' });
+  assert.ok(!agg.byYear.some((y) => y.key === 2023), 'سال ۲۰۲۳ (فقط قیمت غیرواقعی) در جدول نیست');
+  assert.equal(agg.byYear.find((y) => y.key === 2018).estimate, 9.15 * B);
+});
