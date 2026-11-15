@@ -240,7 +240,7 @@ const TRANSCRIBE_MAX_MS = 180_000;
 async function serverTranscribe(wav) {
   const t0 = Date.now();
   const fail = (msg, typeInstead = false) => Object.assign(new Error(msg), { typeInstead });
-  let est = null;
+  let est = config.stt?.estimateMs || null; // از تبدیل آزمایشی سرور، از همان جملهٔ اول
   let queued = false;
   const tick = () => {
     const sec = Math.round((Date.now() - t0) / 1000);

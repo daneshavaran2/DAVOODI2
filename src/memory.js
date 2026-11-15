@@ -46,6 +46,22 @@ export async function cpuLimit() {
   return cpuCached;
 }
 
+let cpuInfoCached = null;
+/** نام و توان پردازندهٔ سرور (برای عیب‌یابی سرعت تبدیل گفتار): AMX و AVX-512 سرعت را چند برابر می‌کنند */
+export async function cpuInfo() {
+  if (cpuInfoCached) return cpuInfoCached;
+  let model = cpus()[0]?.model || null;
+  let flags = [];
+  try {
+    const t = await readFile('/proc/cpuinfo', 'utf8');
+    model = (t.match(/^model name\s*:\s*(.+)$/m) || [])[1]?.trim() || model;
+    const f = ` ${(t.match(/^flags\s*:\s*(.+)$/m) || [])[1] || ''} `;
+    flags = ['avx2', 'avx512f', 'amx_int8'].filter((x) => f.includes(` ${x} `));
+  } catch {}
+  cpuInfoCached = { model, flags };
+  return cpuInfoCached;
+}
+
 /** آیا حافظه برای اجرای whisper کافی است؟ minMB = 0 یعنی بررسی نشود. limitMB: اگر از پیش معلوم است. */
 export async function memoryStatus(minMB, limitMB = null) {
   limitMB = limitMB || Math.round((await memoryLimitBytes()) / 1024 / 1024);

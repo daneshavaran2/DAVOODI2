@@ -215,10 +215,32 @@ export function recentRuns() {
   return recent.slice();
 }
 /** زمان تخمینی یک تبدیل روی همین سرور (میانهٔ اجراهای اخیر) یا null */
+let warmMs = null; // زمان تبدیل آزمایشی هنگام راه‌اندازی whisper-server
 export function estimateMs() {
-  if (!recent.length) return null;
+  if (!recent.length) return warmMs;
   const v = recent.map((r) => r.ms).sort((a, b) => a - b);
   return v[Math.floor(v.length / 2)];
+}
+
+/** WAV سکوت با نویز بسیار کم (برای تبدیل آزمایشی) */
+function warmupWav(seconds = 3) {
+  const n = Math.round(seconds * 16000);
+  const b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0, 'ascii');
+  b.writeUInt32LE(36 + n * 2, 4);
+  b.write('WAVE', 8, 'ascii');
+  b.write('fmt ', 12, 'ascii');
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20);
+  b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(16000, 24);
+  b.writeUInt32LE(32000, 28);
+  b.writeUInt16LE(2, 32);
+  b.writeUInt16LE(16, 34);
+  b.write('data', 36, 'ascii');
+  b.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) b.writeInt16LE(Math.round((Math.random() - 0.5) * 40), 44 + i * 2);
+  return b;
 }
 
 function run(bin, args, timeoutMs) {
@@ -298,8 +320,19 @@ export async function startPersistent(cfg, { log = console.log } = {}) {
       try {
         const r = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2000) });
         if (r.status < 500 && persistent.child === child) {
+          const loadS = ((Date.now() - t0) / 1000).toFixed(1);
+          // یک تبدیل آزمایشی، تا اولین جملهٔ کاربر کندتر نباشد و زمان تقریبی از همان اول معلوم باشد
+          const w0 = Date.now();
+          try {
+            await viaServer(warmupWav(), cfg, 3);
+            warmMs = Date.now() - w0;
+          } catch {}
+          if (persistent.child !== child) return resolve(false);
           persistent.state = 'ready';
-          log(`تشخیص گفتار: مدل در حافظه است (whisper-server، ${((Date.now() - t0) / 1000).toFixed(1)} ثانیه برای بار کردن).`);
+          log(
+            `تشخیص گفتار: مدل در حافظه است (whisper-server، ${loadS} ثانیه برای بار کردن` +
+              `${warmMs ? `؛ تبدیل آزمایشی ${(warmMs / 1000).toFixed(1)} ثانیه` : ''}).`,
+          );
           return resolve(true);
         }
       } catch {}
@@ -341,7 +374,7 @@ export function stopPersistent() {
   c?.kill();
 }
 
-async function viaServer(wav, cfg, seconds) {
+async function viaServer(wav, cfg, seconds, port = persistent.port) {
   const fd = new FormData();
   fd.append('file', new Blob([wav], { type: 'audio/wav' }), 'audio.wav');
   const ac = audioCtxArgs(cfg, seconds);
@@ -356,7 +389,7 @@ async function viaServer(wav, cfg, seconds) {
   };
   if (cfg.prompt) fields.prompt = cfg.prompt;
   for (const [k, v] of Object.entries(fields)) fd.append(k, v);
-  const res = await fetch(`http://127.0.0.1:${persistent.port}/inference`, { method: 'POST', body: fd, signal: AbortSignal.timeout(cfg.timeoutMs) });
+  const res = await fetch(`http://127.0.0.1:${port}/inference`, { method: 'POST', body: fd, signal: AbortSignal.timeout(cfg.timeoutMs) });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || body.error) throw new Error(body.error || `whisper-server: HTTP ${res.status}`);
   return String(body.text || '');

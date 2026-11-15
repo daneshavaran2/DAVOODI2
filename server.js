@@ -18,7 +18,7 @@ import { CITIES, DEFAULT_CITIES } from './src/sources/divar.js';
 import { diagnose } from './src/diagnose.js';
 import { findRivals } from './src/rivals.js';
 import { estimateMs, LIMITS, parseWav, persistentStatus, recentRuns, startPersistent, stopPersistent, SttError, sttConfig, sttStatus, transcribe } from './src/stt.js';
-import { cpuLimit } from './src/memory.js';
+import { cpuInfo, cpuLimit } from './src/memory.js';
 import { download, ensureModel } from './src/model.js';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -111,6 +111,8 @@ async function sttInfo({ detail = false } = {}) {
       model: s.modelName,
       threads: cfg.threads,
       cpu: await cpuLimit(),
+      cpuModel: (await cpuInfo()).model,
+      cpuFlags: (await cpuInfo()).flags,
       memoryMB: s.memoryMB,
       persistent: persistentStatus(),
       estimateMs: estimateMs(),
@@ -158,6 +160,40 @@ async function waitForJob(job, waitS) {
 function jobView(job) {
   const { state, text, error, ms, seconds } = job;
   return { job: job.id, state, text, error, ms, seconds, waitedMs: Date.now() - job.created, estimateMs: estimateMs() };
+}
+
+const faNum = (v) => String(v ?? '').replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
+const escHtml = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+/** وضعیت سرور به فارسی و ساده (برای صاحب برنامه): تبدیل گفتار، پردازنده، حافظه و زمان تبدیل‌های اخیر */
+async function statusPage() {
+  const stt = await sttInfo({ detail: true });
+  const ci = await cpuInfo();
+  const sec = (ms) => (ms ? `${faNum((ms / 1000).toFixed(1))} ثانیه` : '—');
+  const rows = [];
+  rows.push(['تبدیل گفتار روی سرور', stt.server ? 'روشن' : `خاموش${stt.reason ? ` — ${stt.reason}` : ''}`]);
+  if (stt.download) rows.push(['آماده شدن مدل', `${stt.download.state} ${faNum(stt.download.percent ?? '')}٪`]);
+  if (stt.server && !stt.demo) {
+    rows.push(['مدل', stt.model]);
+    rows.push(['مدل همیشه در حافظه (whisper-server)', stt.persistent?.state === 'ready' ? 'بله' : stt.persistent?.state || '—']);
+    rows.push(['زمان معمول هر جمله', sec(stt.estimateMs)]);
+    rows.push(['رشته‌های پردازش', faNum(stt.threads)]);
+  }
+  rows.push(['سهم پردازنده', `${faNum(await cpuLimit())} هسته`]);
+  rows.push(['پردازنده', `${ci.model || '—'}${ci.flags.length ? ` (${ci.flags.join('، ')})` : ''}`]);
+  rows.push(['حافظهٔ برنامه', `${faNum((await sttStatus()).memoryMB)} مگابایت`]);
+  const recent = (stt.recent || [])
+    .slice()
+    .reverse()
+    .map((r) => `<li>${faNum(r.seconds)} ثانیه صدا ← ${sec(r.ms)} (${r.via === 'server' ? 'whisper-server' : 'whisper-cli'}، ${faNum(r.threads)} رشته)</li>`)
+    .join('');
+  return `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>وضعیت سرور</title><style>body{font:18px/1.9 Tahoma,system-ui,sans-serif;margin:0;padding:20px 16px;background:#0e1b2c;color:#f3f5f8}
+h1{font-size:22px;margin:0 0 12px}table{width:100%;border-collapse:collapse}td{padding:10px 6px;border-bottom:1px solid #2a3a52;vertical-align:top}
+td:first-child{color:#b8c3d3;width:45%}ul{padding-inline-start:20px}</style></head><body>
+<h1>وضعیت سرور</h1><table>${rows.map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(v)}</td></tr>`).join('')}</table>
+<h1 style="margin-top:20px">تبدیل‌های اخیر</h1>${recent ? `<ul>${recent}</ul>` : '<p>هنوز تبدیلی انجام نشده است.</p>'}
+</body></html>`;
 }
 
 function clientIp(req) {
@@ -268,6 +304,10 @@ async function handle(req, res) {
 
     if (url.pathname === '/api/health') {
       return send(res, 200, { ok: true, demo: DEMO, stt: await sttInfo({ detail: true }), sources: SOURCES.map((s) => s.info) });
+    }
+
+    if (url.pathname === '/status') {
+      return send(res, 200, await statusPage(), { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
     }
 
     if (url.pathname === '/api/config') {
@@ -389,7 +429,11 @@ if (isMain) {
     const s = await sttStatus();
     if (s.available) {
       const cfg = await sttConfig();
-      console.log(`تشخیص گفتار روی سرور: فعال (${s.modelName}، ${cfg.threads} رشته؛ سهم پردازنده: ${await cpuLimit()} هسته)`);
+      const ci = await cpuInfo();
+      console.log(
+        `تشخیص گفتار روی سرور: فعال (${s.modelName}، ${cfg.threads} رشته؛ سهم پردازنده: ${await cpuLimit()} هسته؛ ` +
+          `حافظه: ${s.memoryMB} مگابایت؛ پردازنده: ${ci.model || '?'}${ci.flags.length ? ` [${ci.flags.join(' ')}]` : ''})`,
+      );
       startPersistent(cfg).catch((e) => console.error('whisper-server:', e.message));
       return;
     }
