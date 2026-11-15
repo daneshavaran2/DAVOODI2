@@ -80,9 +80,18 @@ citySel.addEventListener('change', () => {
 // ---------------------------------------------------------------- تشخیص گفتار
 // حالت «server»: صدا ضبط و به /api/transcribe فرستاده می‌شود (whisper روی سرور؛ همهٔ مرورگرها).
 // حالت «browser»: اگر whisper روی سرور نصب نباشد، تشخیص گفتار خود مرورگر (کروم/اج).
+// آیفون: سافاری (و همهٔ مرورگرهای iOS) تشخیص گفتار فارسی ندارد، پس آن‌جا فقط حالت server کار می‌کند.
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// مرورگر داخل برنامه‌ها (تلگرام، اینستاگرام، واتس‌اپ) اغلب به میکروفون دسترسی ندارد
+const IN_APP = /FBAN|FBAV|Instagram|Telegram|WhatsApp|Line\//i.test(navigator.userAgent);
+const browserSR = SR && !IS_IOS ? SR : null;
+const canRecord = () => !!(navigator.mediaDevices?.getUserMedia && (window.AudioContext || window.webkitAudioContext));
+// ماژول ضبط از قبل بارگذاری می‌شود تا ضبط در همان لمس کاربر شروع شود (سافاری بدون آن صدا را باز نمی‌کند)
+let recorder = null;
 let voiceMode = null;
+let micUnavailable = null; // متن توضیح، وقتی میکروفون در این مرورگر کار نمی‌کند
 let rec = null; // browser mode
 let recording = null; // server mode
 let listening = false;
@@ -114,25 +123,30 @@ function setBusy(on) {
   micLabel.textContent = on ? 'صبر کنید' : 'بگویید';
 }
 
-function disableMic(text, isError = false) {
-  micBtn.disabled = true;
-  setStatus(text, isError);
+/** میکروفون در این مرورگر کار نمی‌کند: دکمه کم‌رنگ می‌شود و با زدنش، توضیح می‌آید و کادر نوشتن باز می‌شود. */
+function disableMic(text) {
+  micUnavailable = text;
+  micBtn.classList.add('unavailable');
+  setStatus(text);
 }
 
 function setupVoice() {
   const serverStt = !!config.stt?.server;
-  if (serverStt && navigator.mediaDevices?.getUserMedia && (window.AudioContext || window.webkitAudioContext)) {
-    voiceMode = 'server';
-  } else if (SR) {
-    voiceMode = 'browser';
-  } else if (!window.isSecureContext) {
-    return disableMic('برای استفاده از میکروفون، سایت باید با HTTPS باز شود. فعلاً می‌توانید تایپ کنید.', true);
-  } else {
-    return disableMic('این مرورگر از ضبط صدا پشتیبانی نمی‌کند. می‌توانید نام خودرو را تایپ کنید.');
-  }
   if (!window.isSecureContext) {
-    disableMic('برای استفاده از میکروفون، سایت باید با HTTPS باز شود. فعلاً می‌توانید تایپ کنید.', true);
+    return disableMic('برای استفاده از میکروفون، سایت باید با HTTPS باز شود. فعلاً نام خودرو را بنویسید.');
   }
+  if (serverStt && canRecord()) {
+    voiceMode = 'server';
+    import('/recorder.js').then((m) => (recorder = m), () => {});
+    return;
+  }
+  if (browserSR) {
+    voiceMode = 'browser';
+    return;
+  }
+  if (IS_IOS && IN_APP) return disableMic('میکروفون در مرورگرِ داخل این برنامه کار نمی‌کند. سایت را در سافاری باز کنید، یا نام خودرو را بنویسید.');
+  if (IS_IOS) return disableMic('روی آیفون، گفتار فارسی روی سرور به متن تبدیل می‌شود که الان روشن نیست. لطفاً نام خودرو را بنویسید.');
+  return disableMic('این مرورگر از ضبط صدا پشتیبانی نمی‌کند. لطفاً نام خودرو را بنویسید.');
 }
 
 function heard(text) {
@@ -147,7 +161,9 @@ function micErrorMessage(e) {
   switch (e?.name) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return 'اجازهٔ استفاده از میکروفون داده نشد. از تنظیمات مرورگر (آیکون قفل کنار نشانی) اجازه دهید.';
+      return IS_IOS
+        ? 'اجازهٔ میکروفون داده نشد. در سافاری روی «aA» کنار نشانی بزنید ← «تنظیمات وب‌سایت» ← «میکروفون» ← «اجازه»، سپس دوباره دکمه را بزنید.'
+        : 'اجازهٔ استفاده از میکروفون داده نشد. از تنظیمات مرورگر (آیکون قفل کنار نشانی) اجازه دهید.';
     case 'NotFoundError':
     case 'OverconstrainedError':
       return 'میکروفونی پیدا نشد.';
@@ -159,7 +175,7 @@ function micErrorMessage(e) {
 }
 
 async function startServerVoice() {
-  const { startRecording } = await import('/recorder.js');
+  const { startRecording } = recorder || (await import('/recorder.js'));
   setListening(true);
   setStatus('بگویید… بعد از تمام شدن جمله، خودش متوجه می‌شود.');
   try {
@@ -184,11 +200,12 @@ async function startServerVoice() {
   try {
     const res = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 503 && SR) {
+    if (res.status === 503 && browserSR) {
       // تشخیص گفتار سرور در دسترس نیست؛ از این به بعد تشخیص گفتار مرورگر
       voiceMode = 'browser';
       throw new Error('تشخیص گفتار سرور در دسترس نیست؛ دوباره روی میکروفون بزنید (این بار مرورگر گوش می‌دهد).');
     }
+    if (res.status === 503) throw new Error('تبدیل گفتار به متن الان در دسترس نیست؛ لطفاً نام خودرو را بنویسید.');
     if (!res.ok) throw new Error(data.error || `خطای سرور (${res.status})`);
     if (!data.text) setStatus('متوجه نشدم؛ لطفاً دوباره و شمرده‌تر بگویید.', true);
     else heard(data.text);
@@ -251,6 +268,11 @@ function startBrowserVoice() {
 }
 
 micBtn.addEventListener('click', async () => {
+  if (micUnavailable) {
+    setStatus(micUnavailable, true);
+    input.focus();
+    return;
+  }
   if (micBtn.disabled || busy) return;
   if (listening) {
     if (recording) recording.stop();

@@ -22,8 +22,8 @@ export async function memoryLimitBytes() {
   return limit;
 }
 
-/** آیا حافظه برای اجرای whisper کافی است؟ minMB = 0 یعنی بررسی نشود. */
-export async function memoryStatus(minMB) {
-  const limitMB = Math.round((await memoryLimitBytes()) / 1024 / 1024);
+/** آیا حافظه برای اجرای whisper کافی است؟ minMB = 0 یعنی بررسی نشود. limitMB: اگر از پیش معلوم است. */
+export async function memoryStatus(minMB, limitMB = null) {
+  limitMB = limitMB || Math.round((await memoryLimitBytes()) / 1024 / 1024);
   return { limitMB, minMB, ok: !minMB || limitMB >= minMB };
 }

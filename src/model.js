@@ -10,11 +10,14 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { memoryStatus } from './memory.js';
-import { MODELS_DIR, sttConfig } from './stt.js';
+import { minMemoryFor, MODELS_DIR, sttConfig } from './stt.js';
 
 export const DEFAULT_MODEL = 'large-v3-turbo-q8_0';
+/** مدل مناسب حافظهٔ برنامه: با ۱٫۴ گیگابایت یا بیشتر q8_0 (سریع‌تر)، وگرنه q5_0 (۹۰۰ مگابایت) */
+export const defaultModelFor = (limitMB) => (limitMB >= minMemoryFor('large-v3-turbo-q8_0') ? DEFAULT_MODEL : 'large-v3-turbo-q5_0');
 export const KNOWN_SHA256 = {
   'large-v3-turbo-q8_0': '317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1',
+  'large-v3-turbo-q5_0': '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2',
 };
 
 /** وضعیت دانلود برای /api/health */
@@ -67,14 +70,15 @@ async function fetchOnce(url, part, fetchImpl, log) {
  * env: WHISPER_MODEL_NAME (none = بدون مدل)، WHISPER_MODEL_URL، WHISPER_MODEL_SHA256، WHISPER_MIN_MEMORY_MB
  */
 export async function ensureModel({ env = process.env, modelsDir = MODELS_DIR, fetchImpl = globalThis.fetch, log = console.log } = {}) {
-  const name = env.WHISPER_MODEL_NAME || DEFAULT_MODEL;
-  download.model = name;
   const cfg = await sttConfig(env);
+  const name = env.WHISPER_MODEL_NAME || defaultModelFor(cfg.memoryLimitMB);
+  download.model = name;
   const dest = join(modelsDir, `ggml-${name}.bin`);
+  // مدلی که هست (مثلاً مدل داخل تصویر Docker) کافی است، مگر اینکه مدل دیگری صریحاً خواسته شده باشد
   const present =
     (await exists(dest)) ||
     (env.WHISPER_MODEL && (await exists(env.WHISPER_MODEL))) ||
-    (modelsDir === MODELS_DIR && cfg.model && (await exists(cfg.model)));
+    (!env.WHISPER_MODEL_NAME && modelsDir === MODELS_DIR && cfg.model && (await exists(cfg.model)));
   if (present) return (download.state = 'ready');
   if (name === 'none' || env.WHISPER_AUTO_DOWNLOAD === '0') return (download.state = 'skipped');
 
@@ -87,7 +91,7 @@ export async function ensureModel({ env = process.env, modelsDir = MODELS_DIR, f
     return download.state;
   }
 
-  const mem = await memoryStatus(cfg.minMemoryMB);
+  const mem = await memoryStatus(Number(env.WHISPER_MIN_MEMORY_MB ?? minMemoryFor(name)), cfg.memoryLimitMB);
   if (!mem.ok) {
     download.state = 'skipped';
     download.error = `حافظهٔ برنامه ${mem.limitMB} مگابایت است؛ مدل دست‌کم ${mem.minMB} مگابایت می‌خواهد.`;

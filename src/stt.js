@@ -8,38 +8,57 @@ import { constants as FS } from 'node:fs';
 import { cpus, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { memoryStatus } from './memory.js';
+import { memoryLimitBytes, memoryStatus } from './memory.js';
 
 const ROOT = fileURLToPath(new URL('../whisper/', import.meta.url));
 /** پوشهٔ مدل‌ها (در کانتینر، دیسک لیارا می‌تواند این‌جا وصل شود) */
 export const MODELS_DIR = process.env.WHISPER_MODELS_DIR || join(ROOT, 'models');
+/** مدلی که هنگام ساخت تصویر Docker داخل خود تصویر گذاشته می‌شود (برای سرور بدون دیسک) */
+export const BUNDLED_DIR = process.env.WHISPER_BUNDLED_DIR || join(ROOT, 'bundled');
+
+// حافظهٔ لازم برای هر مدل، از اندازه‌گیری بیشینهٔ حافظهٔ whisper-cli روی جملهٔ فارسی، به‌اضافهٔ Node و حاشیه:
+//   turbo q8_0: ۱۱۰۷ مگابایت ← ۱۴۰۰؛  turbo q5_0: ۷۳۱ (جملهٔ کوتاه) تا ۸۲۶ (۱۶ ثانیه) مگابایت ← ۹۰۰
+// دقت این دو روی ۳۰ جملهٔ آزمون یکی است (۱۶ و ۱۷ درست)؛ q8_0 حدود دو برابر سریع‌تر است.
+export const MODEL_MIN_MB = { 'large-v3-turbo-q8_0': 1400, 'large-v3-turbo-q5_0': 900, 'large-v3-turbo': 2000 };
+export const minMemoryFor = (name) => MODEL_MIN_MB[name] ?? 1400;
+const nameOf = (path) => (path ? path.split(/[\\/]/).pop().replace(/^ggml-/, '').replace(/\.bin$/, '') : null);
 
 // پرامپت اولیه: Whisper نام‌های خاص را بهتر می‌شنود اگر پیش‌تر در «متن قبلی» آمده باشند.
 // فقط نام‌ها، بدون عدد: در آزمایش، عدد در پرامپت باعث می‌شد Whisper عددهای اشتباه بنویسد.
 export const DEFAULT_PROMPT =
   'پژو، پراید، سمند، دنا، تیبا، ساینا، کوییک، شاهین، تارا، رانا، هایما، چری تیگو، تویوتا کمری، کیا سراتو، مدل.';
 
-// اگر WHISPER_MODEL تعیین نشده باشد، بهترین مدل موجود در whisper/models انتخاب می‌شود.
+// اگر WHISPER_MODEL تعیین نشده باشد، بهترین مدل موجود (در whisper/models یا مدل داخل تصویر) که در حافظهٔ
+// برنامه جا می‌شود انتخاب می‌شود.
 // q8_0 روی CPU چند برابر سریع‌تر از q5_0 است (در آزمایش: ۲٫۷ در برابر ۷٫۷ ثانیه).
 const MODEL_PREFERENCE = [
   'large-v3-turbo-q8_0', 'large-v3-turbo', 'large-v3-turbo-q5_0', 'medium-q8_0', 'medium', 'medium-q5_0',
   'small-q8_0', 'small', 'small-q5_1', 'base-q8_0', 'base', 'base-q5_1', 'tiny-q8_0', 'tiny', 'tiny-q5_1',
 ];
 
-// پنجرهٔ صوتی کوتاه‌تر (512 ≈ ۱۰ ثانیه به جای ۳۰) رمزگذار را حدود ۳ برابر سریع‌تر می‌کند؛
-// فقط برای صداهای کوتاه به کار می‌رود.
+// پنجرهٔ صوتی کوتاه‌تر (512 ≈ ۱۰ ثانیه به جای ۳۰) رمزگذار را حدود ۳ برابر سریع‌تر می‌کند و حافظهٔ کمتری می‌گیرد؛
+// برای صدای بلندتر، پنجره به اندازهٔ همان صدا (به‌اضافهٔ یک ثانیه) است، نه کل ۳۰ ثانیه.
 const SHORT_AUDIO_CTX = 512;
-const SHORT_AUDIO_MAX_SECONDS = 9;
+const FULL_AUDIO_CTX = 1500; // ۳۰ ثانیه
+const CTX_PER_SECOND = 50;
 
 export const LIMITS = { minSeconds: 0.3, maxSeconds: 30, maxBytes: 16000 * 2 * 30 + 1024 };
 
 /** تنظیمات از متغیرهای محیطی؛ هر بار خوانده می‌شود تا تغییر بدون راه‌اندازی دوباره هم اثر کند. */
 export async function sttConfig(env = process.env) {
+  // سقف حافظه (WHISPER_MEMORY_LIMIT_MB برای جاهایی که cgroup دیده نمی‌شود، و برای آزمون)
+  const memoryLimitMB = Number(env.WHISPER_MEMORY_LIMIT_MB) || Math.round((await memoryLimitBytes()) / 2 ** 20);
   let model = env.WHISPER_MODEL || null;
   if (!model) {
-    const files = await readdir(MODELS_DIR).catch(() => []);
-    const name = MODEL_PREFERENCE.find((m) => files.includes(`ggml-${m}.bin`));
-    if (name) model = join(MODELS_DIR, `ggml-${name}.bin`);
+    const found = [];
+    for (const dir of [MODELS_DIR, BUNDLED_DIR]) {
+      const files = await readdir(dir).catch(() => []);
+      for (const m of MODEL_PREFERENCE) if (files.includes(`ggml-${m}.bin`)) found.push({ m, path: join(dir, `ggml-${m}.bin`) });
+    }
+    found.sort((a, b) => MODEL_PREFERENCE.indexOf(a.m) - MODEL_PREFERENCE.indexOf(b.m));
+    // اگر هیچ مدلی جا نشود، کم‌حافظه‌ترین انتخاب می‌شود تا پیام وضعیت، کمترین حافظهٔ لازم را بگوید
+    const pick = found.find((f) => minMemoryFor(f.m) <= memoryLimitMB) || [...found].sort((a, b) => minMemoryFor(a.m) - minMemoryFor(b.m))[0];
+    if (pick) model = pick.path;
   }
   return {
     bin: env.WHISPER_BIN || join(ROOT, 'whisper.cpp', 'build', 'bin', 'whisper-cli'),
@@ -48,8 +67,9 @@ export async function sttConfig(env = process.env) {
     threads: Number(env.WHISPER_THREADS) || Math.max(1, Math.min(4, cpus().length)),
     prompt: env.WHISPER_PROMPT ?? DEFAULT_PROMPT,
     concurrency: Math.max(1, Number(env.WHISPER_CONCURRENCY) || 1),
-    // مدل پیش‌فرض (turbo q8) در آزمایش حدود ۱۱۰۰ مگابایت حافظه گرفت؛ کمتر از این، whisper اجرا نمی‌شود
-    minMemoryMB: Number(env.WHISPER_MIN_MEMORY_MB ?? 1400),
+    // کمتر از حافظهٔ لازم برای همین مدل (MODEL_MIN_MB)، whisper اجرا نمی‌شود تا برنامه کشته نشود
+    minMemoryMB: Number(env.WHISPER_MIN_MEMORY_MB ?? minMemoryFor(nameOf(model))),
+    memoryLimitMB,
     timeoutMs: Number(env.WHISPER_TIMEOUT_MS) || 60_000,
     // auto: برای صدای کوتاه -ac 512؛ 0: همیشه پنجرهٔ کامل؛ عدد: همان مقدار
     audioCtx: env.WHISPER_AUDIO_CTX ?? 'auto',
@@ -58,7 +78,11 @@ export async function sttConfig(env = process.env) {
 }
 
 export function audioCtxArgs(cfg, seconds) {
-  if (cfg.audioCtx === 'auto') return seconds <= SHORT_AUDIO_MAX_SECONDS ? ['-ac', String(SHORT_AUDIO_CTX)] : [];
+  if (cfg.audioCtx === 'auto') {
+    const ctx = Math.ceil(((seconds + 1) * CTX_PER_SECOND) / 64) * 64;
+    if (ctx <= SHORT_AUDIO_CTX) return ['-ac', String(SHORT_AUDIO_CTX)];
+    return ctx >= FULL_AUDIO_CTX ? [] : ['-ac', String(ctx)];
+  }
   const n = Number(cfg.audioCtx);
   return n > 0 ? ['-ac', String(n)] : [];
 }
@@ -74,7 +98,7 @@ export function _resetDisabled() {
 export async function sttStatus(cfg) {
   cfg = cfg || (await sttConfig());
   const ok = async (p, mode) => !!p && access(p, mode).then(() => true, () => false);
-  const [bin, model, mem] = await Promise.all([ok(cfg.bin, FS.X_OK), ok(cfg.model, FS.R_OK), memoryStatus(cfg.minMemoryMB)]);
+  const [bin, model, mem] = await Promise.all([ok(cfg.bin, FS.X_OK), ok(cfg.model, FS.R_OK), memoryStatus(cfg.minMemoryMB, cfg.memoryLimitMB)]);
   const memReason = mem.ok
     ? null
     : `حافظهٔ این برنامه (${mem.limitMB} مگابایت) برای تشخیص گفتار روی سرور کافی نیست (دست‌کم ${mem.minMB} مگابایت).`;

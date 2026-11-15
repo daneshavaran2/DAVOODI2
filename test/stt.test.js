@@ -164,11 +164,13 @@ test('dedupeRepeats: تکرار جمله (خطای رایج Whisper)', async () 
   assert.equal(cleanTranscript('آیما اس حف، آیما اس حف،'), 'آیما اس حف');
 });
 
-test('audioCtxArgs: پنجرهٔ کوتاه فقط برای صدای کوتاه', async () => {
+test('audioCtxArgs: پنجرهٔ صوتی به اندازهٔ صدا (کمتر از ۱۰ ثانیه: ۵۱۲؛ ۳۰ ثانیه: کامل)', async () => {
   const { audioCtxArgs } = await import('../src/stt.js');
   const auto = await sttConfig({});
   assert.deepEqual(audioCtxArgs(auto, 3), ['-ac', '512']);
-  assert.deepEqual(audioCtxArgs(auto, 12), []);
+  assert.deepEqual(audioCtxArgs(auto, 9), ['-ac', '512']);
+  assert.deepEqual(audioCtxArgs(auto, 12), ['-ac', '704'], '۱۳ ثانیه پنجره');
+  assert.deepEqual(audioCtxArgs(auto, 29.5), []);
   assert.deepEqual(audioCtxArgs(await sttConfig({ WHISPER_AUDIO_CTX: '0' }), 3), []);
   assert.deepEqual(audioCtxArgs(await sttConfig({ WHISPER_AUDIO_CTX: '768' }), 20), ['-ac', '768']);
 });

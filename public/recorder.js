@@ -79,11 +79,21 @@ export function encodeWav(f32, rate = TARGET_RATE) {
  * بعد از گفتن، silenceMs سکوت شود؛ یا تا noSpeechMs صدایی نیاید؛ یا maxMs بگذرد.
  */
 export async function startRecording({ onLevel, onSpeech, maxMs = 12000, silenceMs = 1200, noSpeechMs = 7000 } = {}) {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-  });
+  // AudioContext پیش از پرسیدن اجازهٔ میکروفون و در همان لمس کاربر ساخته و روشن می‌شود؛
+  // سافاری آیفون پس از پنجرهٔ اجازه، دیگر اجازهٔ روشن کردنش را نمی‌دهد و صدایی ضبط نمی‌شود.
   const Ctx = window.AudioContext || window.webkitAudioContext;
   const ctx = new Ctx();
+  const resuming = ctx.state === 'suspended' ? ctx.resume().catch(() => {}) : null;
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (e) {
+    ctx.close().catch(() => {});
+    throw e;
+  }
+  await resuming;
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
   const rate = ctx.sampleRate;
   const source = ctx.createMediaStreamSource(stream);

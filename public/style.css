@@ -259,7 +259,9 @@ h1 {
 .mic.busy .mic-lamp { background: #f0b860; box-shadow: 0 0 10px 2px rgb(240 184 96 / 0.55); }
 .mic.busy::before { opacity: 1; border: 3px solid transparent; border-top-color: #ecd8ae; animation: spin 0.9s linear infinite; }
 
-.mic[disabled] { cursor: not-allowed; filter: grayscale(1) brightness(0.75); transform: none; box-shadow: none; }
+.mic[disabled],
+.mic.unavailable { filter: grayscale(1) brightness(0.75); transform: none; box-shadow: none; }
+.mic[disabled] { cursor: not-allowed; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes ring {
