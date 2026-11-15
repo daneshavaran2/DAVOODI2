@@ -6,6 +6,7 @@
 // اجرا: node server.js   (پورت با PORT، حالت نمایشی با DEMO=1)
 
 import http from 'node:http';
+import os from 'node:os';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize as normPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -211,10 +212,54 @@ async function handle(req, res) {
 
 export const server = http.createServer(handle);
 
+const printable = (buf) => JSON.stringify(Buffer.from(buf).subarray(0, 48).toString('latin1'));
+
+/**
+ * عیب‌یابی استقرار در سطح اتصال: هر اتصال TCP (حتی اگر درخواست HTTP درستی نفرستد) و هر درخواست
+ * نامعتبر، با آغاز داده‌اش، ثبت می‌شود. مثلاً اگر سکو به جای HTTP ساده، HTTPS یا HTTP/2 یا
+ * PROXY protocol بفرستد، از همین خط معلوم می‌شود. پاسخ به درخواست نامعتبر همان پاسخ پیش‌فرض Node است.
+ */
+export function instrument(srv, log = console.log, limit = 10) {
+  let conns = 0;
+  let errors = 0;
+  srv.on('connection', (sock) => {
+    if (conns++ < limit) log(`اتصال رسید: پورت ${sock.localPort}، از ${String(sock.remoteAddress || '?').replace(/^::ffff:/, '')}`);
+  });
+  srv.on('clientError', (err, sock) => {
+    const quietReset = err.code === 'ECONNRESET' && !err.rawPacket?.length;
+    if (!quietReset && errors++ < limit) {
+      log(
+        `درخواست نامعتبر روی پورت ${sock.localPort}: ${err.code || err.message}` +
+          (err.rawPacket?.length ? `؛ آغاز داده: ${printable(err.rawPacket)}` : ''),
+      );
+    }
+    if (err.code === 'ECONNRESET' || !sock.writable) return sock.destroy();
+    const status =
+      err.code === 'HPE_HEADER_OVERFLOW'
+        ? '431 Request Header Fields Too Large'
+        : err.code === 'ERR_HTTP_REQUEST_TIMEOUT'
+          ? '408 Request Timeout'
+          : '400 Bad Request';
+    sock.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
+  });
+  return srv;
+}
+
+/** نشانی‌های شبکهٔ کانتینر (بدون loopback)، برای اینکه در لاگ معلوم باشد IPv6 دارد یا نه */
+function networkAddresses() {
+  return Object.values(os.networkInterfaces())
+    .flat()
+    .filter((i) => i && !i.internal)
+    .map((i) => i.address);
+}
+
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
+  instrument(server);
+  const addrs = networkAddresses();
+  console.log(`نشانی‌های شبکهٔ کانتینر: ${addrs.join('، ') || 'هیچ'}${addrs.some((a) => a.includes(':')) ? '' : ' (بدون IPv6)'}`);
   for (const p of EXTRA_PORTS) {
-    const extra = http.createServer(handle);
+    const extra = instrument(http.createServer(handle));
     extra.on('error', (e) => console.log(`پورت اضافهٔ ${p} در دسترس نیست (${e.code})؛ مهم نیست اگر سکو از پورت ${PORT} استفاده کند.`));
     extra.listen(p, HOST, () => console.log(`همچنین روی ${where(extra.address())} گوش می‌دهد.`));
   }
