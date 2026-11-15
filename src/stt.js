@@ -5,10 +5,10 @@
 import { spawn } from 'node:child_process';
 import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { constants as FS } from 'node:fs';
-import { cpus, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { memoryLimitBytes, memoryStatus } from './memory.js';
+import { cpuLimit, memoryLimitBytes, memoryStatus } from './memory.js';
 
 const ROOT = fileURLToPath(new URL('../whisper/', import.meta.url));
 /** پوشهٔ مدل‌ها (در کانتینر، دیسک لیارا می‌تواند این‌جا وصل شود) */
@@ -64,13 +64,15 @@ export async function sttConfig(env = process.env) {
     bin: env.WHISPER_BIN || join(ROOT, 'whisper.cpp', 'build', 'bin', 'whisper-cli'),
     model,
     language: env.WHISPER_LANG || 'fa',
-    threads: Number(env.WHISPER_THREADS) || Math.max(1, Math.min(4, cpus().length)),
+    // به اندازهٔ سهم پردازندهٔ برنامه (نه همهٔ هسته‌های سرور)، حداکثر ۴
+    threads: Number(env.WHISPER_THREADS) || Math.max(1, Math.min(4, Math.floor(await cpuLimit()))),
     prompt: env.WHISPER_PROMPT ?? DEFAULT_PROMPT,
     concurrency: Math.max(1, Number(env.WHISPER_CONCURRENCY) || 1),
     // کمتر از حافظهٔ لازم برای همین مدل (MODEL_MIN_MB)، whisper اجرا نمی‌شود تا برنامه کشته نشود
     minMemoryMB: Number(env.WHISPER_MIN_MEMORY_MB ?? minMemoryFor(nameOf(model))),
     memoryLimitMB,
-    timeoutMs: Number(env.WHISPER_TIMEOUT_MS) || 60_000,
+    // روی سرور کم‌هسته هر جمله تا چند ده ثانیه طول می‌کشد؛ مرورگر نتیجه را جداگانه می‌پرسد، پس مهلت بلندتر است
+    timeoutMs: Number(env.WHISPER_TIMEOUT_MS) || 150_000,
     // auto: برای صدای کوتاه -ac 512؛ 0: همیشه پنجرهٔ کامل؛ عدد: همان مقدار
     audioCtx: env.WHISPER_AUDIO_CTX ?? 'auto',
     extraArgs: (env.WHISPER_ARGS || '').split(/\s+/).filter(Boolean),
@@ -200,6 +202,18 @@ export function queueSize() {
   return { active, waiting: waiting.length };
 }
 
+// زمان اجراهای اخیر، برای «معمولاً حدود N ثانیه» و عیب‌یابی (/api/health)
+const recent = [];
+export function recentRuns() {
+  return recent.slice();
+}
+/** زمان تخمینی یک تبدیل روی همین سرور (میانهٔ اجراهای اخیر) یا null */
+export function estimateMs() {
+  if (!recent.length) return null;
+  const v = recent.map((r) => r.ms).sort((a, b) => a - b);
+  return v[Math.floor(v.length / 2)];
+}
+
 function run(bin, args, timeoutMs) {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -234,7 +248,8 @@ function run(bin, args, timeoutMs) {
 }
 
 /** WAV ← متن فارسی. خروجی: { text, raw, ms, seconds } */
-export async function transcribe(wav, cfg) {
+/** onStart: وقتی نوبت این صدا شد و whisper شروع کرد (برای نمایش «در صف» / «در حال تبدیل») */
+export async function transcribe(wav, cfg, { onStart } = {}) {
   cfg = cfg || (await sttConfig());
   const info = parseWav(wav);
   if (info.seconds < LIMITS.minSeconds) throw new SttError('صدا خیلی کوتاه بود؛ دوباره بگویید.');
@@ -243,6 +258,7 @@ export async function transcribe(wav, cfg) {
   if (!status.available) throw new SttError(status.disabledReason || 'تشخیص گفتار روی سرور نصب نشده است.', 503);
 
   const release = await slot(cfg.concurrency);
+  onStart?.();
   const dir = await mkdtemp(join(tmpdir(), 'gheymat-stt-'));
   const t0 = Date.now();
   try {
@@ -252,7 +268,11 @@ export async function transcribe(wav, cfg) {
     if (cfg.prompt) args.push('--prompt', cfg.prompt);
     args.push(...audioCtxArgs(cfg, info.seconds), ...cfg.extraArgs);
     const raw = await run(cfg.bin, args, cfg.timeoutMs);
-    return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms: Date.now() - t0, seconds: info.seconds };
+    const ms = Date.now() - t0;
+    recent.push({ ms, seconds: Math.round(info.seconds * 10) / 10, threads: cfg.threads, at: new Date().toISOString() });
+    if (recent.length > 10) recent.shift();
+    console.log(`تبدیل گفتار: ${info.seconds.toFixed(1)} ثانیه صدا در ${(ms / 1000).toFixed(1)} ثانیه (${cfg.threads} رشته)`);
+    return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms, seconds: info.seconds };
   } finally {
     release();
     await rm(dir, { recursive: true, force: true });

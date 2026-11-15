@@ -181,22 +181,52 @@ async function startServerVoice() {
   setBusy(true);
   setStatus('در حال تبدیل گفتار به متن…');
   try {
-    const res = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 503 && browserSR) {
-      // تشخیص گفتار سرور در دسترس نیست؛ از این به بعد تشخیص گفتار مرورگر
-      voiceMode = 'browser';
-      throw new Error('تشخیص گفتار سرور در دسترس نیست؛ دوباره روی میکروفون بزنید (این بار مرورگر گوش می‌دهد).');
-    }
-    if (res.status === 503) throw new Error('تبدیل گفتار به متن الان در دسترس نیست؛ لطفاً نام خودرو را بنویسید.');
-    if (!res.ok) throw new Error(data.error || `خطای سرور (${res.status})`);
+    const data = await serverTranscribe(wav);
     if (!data.text) setStatus('متوجه نشدم؛ لطفاً دوباره و شمرده‌تر بگویید.', true);
     else heard(data.text);
   } catch (e) {
     setStatus(e.message || 'تبدیل گفتار به متن ممکن نشد.', true);
+    if (e.typeInstead) input.focus();
   } finally {
     setBusy(false);
   }
+}
+
+const TRANSCRIBE_MAX_MS = 180_000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * صدا به سرور فرستاده می‌شود و فوراً شمارهٔ کار برمی‌گردد؛ سپس هر ۱٫۵ ثانیه نتیجه پرسیده می‌شود
+ * (تبدیل روی سرور کم‌هسته ده‌ها ثانیه طول می‌کشد و یک درخواست طولانی را پراکسی سکو قطع می‌کند).
+ */
+async function serverTranscribe(wav) {
+  const t0 = Date.now();
+  const fail = (msg, typeInstead = false) => Object.assign(new Error(msg), { typeInstead });
+  let res = await fetch('/api/transcribe?async=1', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
+  let data = await res.json().catch(() => ({}));
+  if (res.status === 503 && browserSR) {
+    // تشخیص گفتار سرور در دسترس نیست؛ از این به بعد تشخیص گفتار مرورگر
+    voiceMode = 'browser';
+    throw fail('تشخیص گفتار سرور در دسترس نیست؛ دوباره روی میکروفون بزنید (این بار مرورگر گوش می‌دهد).');
+  }
+  if (res.status === 503) throw fail('تبدیل گفتار به متن الان در دسترس نیست؛ لطفاً نام خودرو را بنویسید.', true);
+  if (!res.ok) throw fail(data.error || `خطای سرور (${res.status})`);
+  // سرور قدیمی‌تر یا حالت نمایشی: متن همان‌جا آمده است
+  while (data.job && data.state !== 'done') {
+    if (data.state === 'error') throw fail(data.error || 'تبدیل گفتار به متن ممکن نشد.', true);
+    const waited = Date.now() - t0;
+    if (waited > TRANSCRIBE_MAX_MS) throw fail('تبدیل گفتار به متن روی سرور خیلی طول کشید؛ لطفاً نام خودرو را بنویسید.', true);
+    const sec = Math.round(waited / 1000);
+    const est = data.estimateMs ? `؛ معمولاً حدود ${fa(Math.round(data.estimateMs / 1000))} ثانیه` : '';
+    setStatus(data.state === 'queued' ? `در صف تبدیل گفتار… ${fa(sec)} ثانیه` : `در حال تبدیل گفتار به متن… ${fa(sec)} ثانیه${est}`);
+    await sleep(1500);
+    res = await fetch(`/api/transcribe?job=${encodeURIComponent(data.job)}`, { cache: 'no-store' }).catch(() => null);
+    if (!res) continue; // قطع کوتاه شبکهٔ گوشی: دوباره بپرس
+    const next = await res.json().catch(() => null);
+    if (!res.ok) throw fail(next?.error || `خطای سرور (${res.status})`, true);
+    if (next) data = next;
+  }
+  return data;
 }
 
 // ---------- حالت browser

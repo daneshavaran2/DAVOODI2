@@ -7,7 +7,7 @@
 // اجرا: node server.js   (پورت با PORT، حالت نمایشی با DEMO=1)
 
 import http from 'node:http';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import os from 'node:os';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize as normPath } from 'node:path';
@@ -17,7 +17,8 @@ import { lookupAll, SOURCES } from './src/lookup.js';
 import { CITIES, DEFAULT_CITIES } from './src/sources/divar.js';
 import { diagnose } from './src/diagnose.js';
 import { findRivals } from './src/rivals.js';
-import { LIMITS, parseWav, SttError, sttStatus, transcribe } from './src/stt.js';
+import { estimateMs, LIMITS, parseWav, recentRuns, SttError, sttConfig, sttStatus, transcribe } from './src/stt.js';
+import { cpuLimit } from './src/memory.js';
 import { download, ensureModel } from './src/model.js';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -100,9 +101,13 @@ function readBody(req, limit) {
 // در حالت نمایشی بدون whisper، یک جملهٔ ثابت برمی‌گردد تا مسیر ضبط صدا قابل آزمایش باشد
 const DEMO_TRANSCRIPT = 'پژو دویست و شش تیپ دو مدل هزار و چهارصد';
 
-async function sttInfo() {
+async function sttInfo({ detail = false } = {}) {
   const s = await sttStatus();
-  if (s.available) return { server: true, model: s.modelName };
+  if (s.available) {
+    if (!detail) return { server: true, model: s.modelName, estimateMs: estimateMs() };
+    const cfg = await sttConfig();
+    return { server: true, model: s.modelName, threads: cfg.threads, cpu: await cpuLimit(), memoryMB: s.memoryMB, estimateMs: estimateMs(), recent: recentRuns() };
+  }
   if (DEMO) return { server: true, model: 'demo', demo: true };
   // چرا تشخیص گفتار سرور فعال نیست (برای /api/health و عیب‌یابی)
   return {
@@ -110,6 +115,28 @@ async function sttInfo() {
     reason: s.disabledReason || download.error || null,
     download: download.state === 'idle' ? undefined : { state: download.state, model: download.model, percent: download.percent },
   };
+}
+
+// کارهای تبدیل گفتار: مرورگر صدا را می‌فرستد و فوراً شمارهٔ کار می‌گیرد، سپس هر چند ثانیه نتیجه را می‌پرسد.
+// تبدیلِ طولانی روی سرور کم‌هسته (ده‌ها ثانیه) به مهلت درخواست در پراکسی سکو (لیارا) نمی‌خورد.
+const jobs = new Map();
+const JOB_TTL_MS = 10 * 60_000;
+const MAX_PENDING_JOBS = 20;
+
+function startJob(wav) {
+  const id = randomBytes(9).toString('base64url');
+  const job = { id, state: 'queued', created: Date.now() };
+  jobs.set(id, job);
+  transcribe(wav, undefined, { onStart: () => Object.assign(job, { state: 'running', started: Date.now() }) })
+    .then((r) => Object.assign(job, { state: 'done', text: r.text, ms: r.ms, seconds: r.seconds }))
+    .catch((e) => Object.assign(job, { state: 'error', error: e instanceof SttError ? e.message : 'تبدیل گفتار به متن ممکن نشد.' }))
+    .finally(() => setTimeout(() => jobs.delete(id), JOB_TTL_MS).unref());
+  return job;
+}
+
+function jobView(job) {
+  const { state, text, error, ms, seconds } = job;
+  return { job: job.id, state, text, error, ms, seconds, waitedMs: Date.now() - job.created, estimateMs: estimateMs() };
 }
 
 function clientIp(req) {
@@ -180,6 +207,11 @@ async function handle(req, res) {
   try {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/api/transcribe') {
+      if (req.method === 'GET' && url.searchParams.get('job')) {
+        const job = jobs.get(url.searchParams.get('job'));
+        if (!job) return send(res, 404, { error: 'این تبدیل پیدا نشد (شاید سرور دوباره راه افتاده است)؛ دوباره بگویید.' });
+        return send(res, 200, jobView(job), { 'Cache-Control': 'no-store' });
+      }
       if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' }, { Allow: 'POST' });
       if (!allowed(clientIp(req))) {
         return send(res, 429, { error: 'تعداد درخواست‌ها زیاد است؛ یک دقیقه صبر کنید.' }, { 'Retry-After': '60' });
@@ -190,6 +222,14 @@ async function handle(req, res) {
         if (stt.demo) {
           const info = parseWav(wav);
           return send(res, 200, { text: DEMO_TRANSCRIPT, ms: 0, seconds: info.seconds, demo: true });
+        }
+        if (url.searchParams.get('async') === '1') {
+          parseWav(wav); // صدای نامعتبر همین الان خطا بدهد
+          const st = await sttStatus();
+          if (!st.available) throw new SttError(st.disabledReason || 'تشخیص گفتار روی سرور نصب نشده است.', 503);
+          const pending = [...jobs.values()].filter((j) => j.state === 'queued' || j.state === 'running').length;
+          if (pending >= MAX_PENDING_JOBS) throw new SttError('سرور الان سرش شلوغ است؛ چند لحظه بعد دوباره بگویید.', 429);
+          return send(res, 202, jobView(startJob(wav)), { 'Cache-Control': 'no-store' });
         }
         const r = await transcribe(wav);
         return send(res, 200, { text: r.text, ms: r.ms, seconds: r.seconds }, { 'Cache-Control': 'no-store' });
@@ -202,7 +242,7 @@ async function handle(req, res) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Method not allowed' });
 
     if (url.pathname === '/api/health') {
-      return send(res, 200, { ok: true, demo: DEMO, stt: await sttInfo(), sources: SOURCES.map((s) => s.info) });
+      return send(res, 200, { ok: true, demo: DEMO, stt: await sttInfo({ detail: true }), sources: SOURCES.map((s) => s.info) });
     }
 
     if (url.pathname === '/api/config') {
@@ -315,7 +355,10 @@ if (isMain) {
     const a = server.address();
     console.log(`قیمت‌یاب خودرو آماده است: روی ${where(a)} گوش می‌دهد${DEMO ? '  (حالت نمایشی — قیمت‌ها واقعی نیستند)' : ''}`);
     const s = await sttStatus();
-    if (s.available) return console.log(`تشخیص گفتار روی سرور: فعال (${s.modelName})`);
+    if (s.available) {
+      const cfg = await sttConfig();
+      return console.log(`تشخیص گفتار روی سرور: فعال (${s.modelName}، ${cfg.threads} رشته؛ سهم پردازنده: ${await cpuLimit()} هسته)`);
+    }
     if (s.bin && !s.model && !DEMO && !s.disabledReason) {
       // whisper هست ولی مدل نه (مثلاً اولین اجرای کانتینر): دانلود در پس‌زمینه
       console.log('تشخیص گفتار روی سرور: مدل هنوز نیست؛ تا وقتی آماده شود، تشخیص گفتار مرورگر استفاده می‌شود.');

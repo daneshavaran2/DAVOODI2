@@ -156,6 +156,44 @@ test('API: POST /api/transcribe و /api/config', async (t) => {
   assert.ok(!big || big.status === 413);
 });
 
+test('API: تبدیل جداگانه (async): شمارهٔ کار فوراً، سپس پرسیدن تا آماده شود؛ و سهم پردازنده در health', async (t) => {
+  resetFake();
+  process.env.WHISPER_BIN = BIN;
+  process.env.WHISPER_MODEL = MODEL;
+  process.env.FAKE_SLEEP = '700'; // whisper کند
+  const { server } = await import('../server.js');
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => {
+    server.close();
+    delete process.env.FAKE_SLEEP;
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  const t0 = Date.now();
+  const start = await fetch(`${base}/api/transcribe?async=1`, { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: makeWav(1.5) });
+  assert.equal(start.status, 202);
+  const job = await start.json();
+  assert.ok(Date.now() - t0 < 500, 'پاسخ فوری، پیش از پایان whisper');
+  assert.ok(job.job && ['queued', 'running'].includes(job.state));
+
+  let r = job;
+  while (r.state !== 'done' && r.state !== 'error') {
+    await new Promise((res) => setTimeout(res, 150));
+    r = await (await fetch(`${base}/api/transcribe?job=${job.job}`)).json();
+  }
+  assert.equal(r.state, 'done');
+  assert.equal(r.text, 'پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰');
+  assert.ok(r.ms >= 700, 'زمان همین تبدیل');
+  assert.ok(r.estimateMs > 0, 'زمان تخمینی از اجراهای اخیر');
+
+  assert.equal((await fetch(`${base}/api/transcribe?job=nope`)).status, 404);
+  assert.equal((await fetch(`${base}/api/transcribe?async=1`, { method: 'POST', body: Buffer.from('x'.repeat(100)) })).status, 400);
+
+  const health = await (await fetch(`${base}/api/health`)).json();
+  assert.ok(health.stt.threads >= 1 && health.stt.cpu > 0);
+  assert.ok(health.stt.recent.length >= 1);
+});
+
 test('dedupeRepeats: تکرار جمله (خطای رایج Whisper)', async () => {
   const { dedupeRepeats } = await import('../src/stt.js');
   assert.equal(dedupeRepeats('رانا پلاس مدل 1400 رانا پلاس مدل 1400'), 'رانا پلاس مدل 1400');

@@ -25,6 +25,15 @@ const pick = async (mb) => {
   return { file: cfg.model?.split('/').pop() || null, min: cfg.minMemoryMB, status: await sttStatus(cfg) };
 };
 
+test('سهم پردازنده: رشته‌های whisper بیشتر از سهم کانتینر نیست', async () => {
+  const { cpuLimit } = await import('../src/memory.js');
+  const cpu = await cpuLimit();
+  assert.ok(cpu > 0);
+  const cfg = await sttConfig({ WHISPER_BIN: BIN });
+  assert.equal(cfg.threads, Math.max(1, Math.min(4, Math.floor(cpu))));
+  assert.equal((await sttConfig({ WHISPER_BIN: BIN, WHISPER_THREADS: '3' })).threads, 3);
+});
+
 test('حافظهٔ لازم هر مدل و مدل پیش‌فرض برای دانلود', () => {
   assert.equal(minMemoryFor('large-v3-turbo-q8_0'), 1400);
   assert.equal(minMemoryFor('large-v3-turbo-q5_0'), 900);
