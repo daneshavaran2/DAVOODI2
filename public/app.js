@@ -93,7 +93,14 @@ function setStatus(text, isError = false) {
   micStatus.classList.toggle('error', isError);
 }
 
+function buzz(ms = 12) {
+  try {
+    navigator.vibrate?.(ms);
+  } catch {}
+}
+
 function setListening(on) {
+  if (on !== listening) buzz();
   listening = on;
   micBtn.classList.toggle('listening', on);
   micBtn.setAttribute('aria-pressed', String(on));
@@ -283,15 +290,81 @@ let controller = null;
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const q = input.value.trim();
-  if (q) search(q);
-  else input.focus();
+  if (!q) return input.focus();
+  input.blur(); // صفحه‌کلید گوشی بسته شود تا نتیجه دیده شود
+  search(q);
 });
 
-$('#examples').addEventListener('click', (e) => {
+function chipSearch(e) {
   const chip = e.target.closest('.chip');
   if (!chip) return;
-  input.value = chip.textContent.trim();
+  input.value = chip.dataset.q || chip.textContent.trim();
   search(input.value);
+}
+$('#examples').addEventListener('click', chipSearch);
+
+// ---------------------------------------------------------------- جستجوهای اخیر (فقط در همین مرورگر)
+
+const recentBox = $('#recent');
+const RECENT_KEY = 'recent-searches';
+
+function loadRecent() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(list) ? list.filter((x) => typeof x === 'string' && x.length <= 200).slice(0, 5) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecent(q) {
+  const list = [q, ...loadRecent().filter((x) => x !== q)].slice(0, 5);
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+  } catch {}
+  renderRecent();
+}
+
+function renderRecent() {
+  const list = loadRecent();
+  recentBox.hidden = !list.length;
+  recentBox.innerHTML = list.length
+    ? `<span class="examples-label"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-clock"/></svg>اخیر</span>` +
+      list.map((q) => `<button type="button" class="chip" data-q="${esc(q)}">${esc(fa(q))}</button>`).join('')
+    : '';
+}
+recentBox.addEventListener('click', chipSearch);
+renderRecent();
+
+// ---------------------------------------------------------------- نوار پایین گوشی
+
+const dock = $('#dock');
+const phone = window.matchMedia('(max-width: 640px)');
+const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let micInView = true;
+
+function updateDock() {
+  const show = phone.matches && !micInView && results.childElementCount > 0;
+  dock.hidden = !show;
+  document.body.classList.toggle('has-dock', show);
+}
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(([e]) => {
+    micInView = e.isIntersecting;
+    updateDock();
+  }).observe(micBtn);
+}
+phone.addEventListener?.('change', updateDock);
+
+const toTop = () => window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' });
+$('#dockMic').addEventListener('click', () => {
+  micBtn.click(); // در همان لمس کاربر، تا مرورگر اجازهٔ میکروفون را بدهد
+  toTop();
+});
+$('#dockType').addEventListener('click', () => {
+  input.focus({ preventScroll: true });
+  input.select();
+  toTop();
 });
 
 async function search(q) {
@@ -305,6 +378,8 @@ async function search(q) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `خطای سرور (${res.status})`);
     render(data);
+    if (data.summary) saveRecent(q);
+    updateDock();
   } catch (err) {
     if (err.name === 'AbortError') return;
     results.setAttribute('aria-busy', 'false');
@@ -316,7 +391,7 @@ function renderLoading() {
   results.setAttribute('aria-busy', 'true');
   results.innerHTML = `
     <div class="loading">
-      <p>در حال گرفتن قیمت از باما، دیوار و همراه مکانیک…</p>
+      <p>در حال گرفتن قیمت از هفت سایت؛ چند ثانیه صبر کنید…</p>
       <div class="skeleton"></div>
       <div class="skeleton short"></div>
       <div class="skeleton short"></div>
@@ -362,17 +437,52 @@ function gauge(s) {
     </figure>`;
 }
 
-function verdictHead(data) {
-  const q = data.query;
-  const name =
+function carName(data) {
+  return (
     data.canonical?.title ||
     data.sources.find((s) => s.id === 'bama' && s.matched)?.matched.title ||
     data.sources.find((s) => s.matched)?.matched.title ||
-    q.carText;
+    data.query.carText
+  );
+}
+
+function carMeta(data) {
+  const q = data.query;
   const asked = [q.year ? `مدل ${fa(q.year.value)}` : '', q.condition === 'new' ? 'صفر کیلومتر' : q.condition === 'used' ? 'کارکرده' : '']
     .filter(Boolean)
     .join('، ');
-  const meta = asked || (data.summary?.label ? fa(data.summary.label) : '');
+  return asked || (data.summary?.label ? fa(data.summary.label) : '');
+}
+
+function shareText(data) {
+  const s = data.summary;
+  const meta = carMeta(data);
+  const range = s.low && s.high && s.low !== s.high ? `\nبازه: ${short(s.low)} تا ${short(s.high)} تومان` : '';
+  return `قیمت حدودی امروز ${fa(carName(data))}${meta ? `، ${meta}` : ''}: ${toman(s.estimate)}${range}\n(از ${fa(s.sources.length)} سایت قیمت خودرو)`;
+}
+
+async function share(btn, text) {
+  const url = location.href;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'قیمت‌یاب خودرو', text, url });
+    } catch {}
+    return;
+  }
+  const label = btn.querySelector('span');
+  try {
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    label.textContent = 'کپی شد؛ در پیام‌رسان بچسبانید';
+  } catch {
+    label.textContent = 'کپی ممکن نشد';
+  }
+  setTimeout(() => (label.textContent = 'ارسال قیمت'), 2500);
+}
+
+function verdictHead(data) {
+  const q = data.query;
+  const name = carName(data);
+  const meta = carMeta(data);
   const unclear = q.yearUnclear
     ? '<p class="note">سال ساخت را متوجه نشدم؛ قیمت سال‌های مختلف پایین‌تر آمده است. می‌توانید دوباره بگویید یا سال را بنویسید.</p>'
     : '';
@@ -394,8 +504,9 @@ function verdictCard(data) {
     )
     .join('');
   const speakBtn = faVoice
-    ? `<div class="verdict-actions"><button type="button" class="speak" data-say="${esc(`قیمت حدودی ${toman(s.estimate)}`)}"><svg aria-hidden="true"><use href="#i-speak"/></svg>قیمت را بلند بخوان</button></div>`
+    ? `<button type="button" class="speak" data-say="${esc(`قیمت حدودی ${toman(s.estimate)}`)}"><svg aria-hidden="true"><use href="#i-speak"/></svg><span>بلند بخوان</span></button>`
     : '';
+  const actions = `<div class="verdict-actions"><button type="button" class="speak share"><svg aria-hidden="true"><use href="#i-share"/></svg><span>ارسال قیمت</span></button>${speakBtn}</div>`;
   return `
     <article class="verdict">
       ${verdictHead(data)}
@@ -407,7 +518,7 @@ function verdictCard(data) {
         <h3>قیمت در هر منبع</h3>
         <dl>${rows}</dl>
       </section>
-      ${speakBtn}
+      ${actions}
     </article>`;
 }
 
@@ -452,7 +563,7 @@ function yearsCard(data) {
     <div class="card">
       <h2>کارکرده، به تفکیک سال ساخت</h2>
       ${data.byYear.some((y) => y.key === target) ? '<p class="sub">سطر رنگی، سالی است که پرسیدید.</p>' : ''}
-      <table><thead><tr><th>مدل</th><th>قیمت حدودی (تومان)</th><th>منبع</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="years"><thead><tr><th>مدل</th><th>قیمت حدودی (تومان)</th><th>منبع</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
 }
 
@@ -494,7 +605,7 @@ function sourceCard(s) {
     : '';
   const adsTitle = s.totalAds > ads.length ? `آگهی‌ها (${fa(ads.length)} از ${fa(s.totalAds)})` : 'آگهی‌ها';
   return `
-    <details class="card source">
+    <details class="source">
       <summary><span class="dot ${state}"></span><span class="src-name">${esc(s.name)}</span><span class="src-meta">${meta}</span><svg class="chev" aria-hidden="true"><use href="#i-chev"/></svg></summary>
       <div class="source-body">
         ${notes}
@@ -504,6 +615,19 @@ function sourceCard(s) {
         ${link}
       </div>
     </details>`;
+}
+
+const priced = (s) => (s.items || []).some((i) => i.price > 0);
+
+function sourcesCard(list) {
+  const sorted = [...list].sort((a, b) => priced(b) - priced(a));
+  const n = list.filter(priced).length;
+  return `
+    <section class="card sources" aria-labelledby="srcTitle">
+      <h2 id="srcTitle">جزئیات هر سایت</h2>
+      <p class="sub">${fa(n)} سایت از ${fa(list.length)} سایت برای این جستجو قیمت داشت. برای دیدن قیمت‌ها و آگهی‌ها، نام سایت را بزنید.</p>
+      ${sorted.map(sourceCard).join('')}
+    </section>`;
 }
 
 function render(data) {
@@ -530,8 +654,9 @@ function render(data) {
     main = `<article class="verdict verdict-empty">${head}<p class="msg${allFailed ? ' error-box' : ''}">${msg}</p></article>`;
   }
 
-  results.innerHTML = main + hintsCard(data) + yearsCard(data) + factoryCard(data) + data.sources.map(sourceCard).join('');
-  results.querySelector('.speak')?.addEventListener('click', (e) => speak(e.currentTarget.dataset.say));
+  results.innerHTML = main + hintsCard(data) + yearsCard(data) + factoryCard(data) + sourcesCard(data.sources);
+  results.querySelector('.speak:not(.share)')?.addEventListener('click', (e) => speak(e.currentTarget.dataset.say));
+  results.querySelector('.share')?.addEventListener('click', (e) => share(e.currentTarget, shareText(data)));
   results.querySelectorAll('.hint-chip').forEach((b) =>
     b.addEventListener('click', () => {
       input.value = b.dataset.q;

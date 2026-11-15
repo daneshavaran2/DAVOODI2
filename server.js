@@ -32,7 +32,7 @@ const RATE_LIMIT = Number(process.env.RATE_LIMIT) || 20; // درخواست قی�
 
 if (DEMO) {
   const { createDemoFetch } = await import('./src/demo.js');
-  setFetch(createDemoFetch({ delay: 250 }));
+  setFetch(createDemoFetch({ delay: 250, extra: true }));
 }
 
 const MIME = {

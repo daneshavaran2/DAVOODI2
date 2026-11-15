@@ -37,8 +37,15 @@ const KIND_LABEL = { ad: 'آگهی', market: 'قیمت بازار', dealer: 'ق�
 
 /** ترکیب آمار سایت‌های مختلف برای یک گروه (صفر یا یک سال). */
 export function combine(perSource) {
-  const sources = perSource.filter((s) => s.stats);
+  let sources = perSource.filter((s) => s.stats);
   if (!sources.length) return null;
+  // با دست‌کم سه سایت: سایتی که میانه‌اش بیش از ۳ برابر با بقیه فرق دارد (معمولاً واحد اشتباه، ریال به جای تومان)
+  // در برآورد حساب نمی‌شود
+  if (sources.length >= 3) {
+    const ref = quantile(sources.map((s) => s.stats.median).sort((a, b) => a - b), 0.5);
+    const kept = sources.filter((s) => s.stats.median <= ref * 3 && s.stats.median >= ref / 3);
+    if (kept.length >= 2) sources = kept;
+  }
   const medians = sources.map((s) => s.stats.median).sort((a, b) => a - b);
   const one = sources.length === 1 ? sources[0].stats : null;
   return {

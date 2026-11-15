@@ -127,6 +127,8 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action
 
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 
+[hidden] { display: none !important; }
+
 .visually-hidden {
   position: absolute !important;
   width: 1px; height: 1px;
@@ -314,7 +316,8 @@ h1 {
 .ask-foot { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; }
 
 .examples { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; }
-.examples-label { color: var(--night-ink-2); font-size: 1.0625rem; margin-inline-end: 2px; }
+.examples-label { display: inline-flex; align-items: center; gap: 6px; color: var(--night-ink-2); font-size: 1.0625rem; margin-inline-end: 2px; }
+.examples-label svg { width: 18px; height: 18px; }
 
 .chip {
   min-height: 46px;
@@ -503,11 +506,14 @@ tr.is-target td:last-child { border-radius: 10px 0 0 10px; }
 
 /* ---------------------------------------------------------------- جزئیات هر منبع */
 
-details.source { padding: 0; overflow: hidden; }
+.sources .sub { margin-bottom: 4px; }
+details.source { border-top: 1px solid var(--line); }
 details.source > summary {
   list-style: none;
-  min-height: 68px;
-  padding: 16px 26px;
+  min-height: 64px;
+  margin: 0 -10px;
+  padding: 14px 10px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -522,7 +528,7 @@ details.source[open] .chev { transform: rotate(180deg); }
 .dot.bad { background: var(--bad); }
 .src-name { font-weight: 700; font-size: 1.125rem; }
 .src-meta { min-width: 0; color: var(--ink-3); font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.source-body { padding: 0 26px 20px; }
+.source-body { padding: 0 0 18px; }
 .source-body h3 { margin: 10px 0 2px; font-size: 1.0625rem; font-weight: 700; color: var(--ink-2); }
 .ext { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 .ext svg { width: 18px; height: 18px; }
@@ -571,6 +577,41 @@ details.source[open] .chev { transform: rotate(180deg); }
   .mic.listening::before { opacity: 0.6; }
 }
 
+/* ---------------------------------------------------------------- نوار پایین گوشی */
+
+.dock {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+  padding: 10px max(12px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: rgb(14 27 44 / 0.97);
+  border-top: 1px solid rgb(226 196 143 / 0.25);
+  box-shadow: 0 -8px 24px rgb(0 0 0 / 0.25);
+  color-scheme: dark;
+  --focus: var(--night-gold);
+}
+.dock-btn {
+  flex: 1;
+  height: 56px;
+  border: 1px solid var(--night-line);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--night-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+.dock-btn svg { width: 24px; height: 24px; }
+.dock-mic { border: 0; background: var(--gold); color: #0e1b2c; }
+.dock-btn:active { transform: translateY(1px); }
+body.has-dock { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+
 /* ناحیهٔ امن گوشی‌های بی‌لبه (viewport-fit=cover) */
 @supports (padding: max(0px)) {
   .bar, .ask, .page, .foot {
@@ -587,8 +628,28 @@ details.source[open] .chev { transform: rotate(180deg); }
   body { line-height: 1.8; }
   .bar { padding-top: 14px; padding-bottom: 14px; }
   .bar-note { display: none; }
-  .ask { padding-top: 12px; padding-bottom: 40px; gap: 20px; }
-  h1 { font-size: 2rem; }
+  .ask { padding-top: 8px; padding-bottom: 32px; gap: 16px; }
+  h1 { font-size: 1.75rem; }
+  /* نمونه‌ها و جستجوهای اخیر: یک ردیف که با انگشت کنار می‌رود */
+  .ask-foot { gap: 14px; }
+  .ask-foot .examples {
+    width: calc(100% + 2 * var(--gutter, 16px));
+    margin-inline: calc(-1 * var(--gutter, 16px));
+    padding-inline: var(--gutter, 16px);
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 40px);
+    mask-image: linear-gradient(to right, transparent 0, #000 40px);
+  }
+  .ask-foot .examples::-webkit-scrollbar { display: none; }
+  .ask-foot .chip, .ask-foot .examples-label { flex: none; scroll-snap-align: start; }
+  .recent:not([hidden]) + .examples { display: none; }
+  .years th:nth-child(3), .years td:nth-child(3) { display: none; }
+  .verdict-actions .speak { flex: 1; justify-content: center; }
   .mic { width: 136px; height: 136px; }
   .mic svg { width: 40px; height: 40px; }
   .query { flex-direction: column; }

@@ -1,12 +1,18 @@
-// هماهنگ‌کننده: پرسش را تجزیه می‌کند، هر سه سایت را هم‌زمان می‌پرسد و نتیجه را ترکیب می‌کند.
+// هماهنگ‌کننده: پرسش را تجزیه می‌کند، همهٔ سایت‌ها را هم‌زمان می‌پرسد و نتیجه را ترکیب می‌کند.
 
 import { aggregate } from './aggregate.js';
 import { parseQuery } from './text.js';
 import * as bama from './sources/bama.js';
 import * as divar from './sources/divar.js';
 import * as hamrah from './sources/hamrah.js';
+import * as khodro45 from './sources/khodro45.js';
+import * as iranjib from './sources/iranjib.js';
+import * as carir from './sources/carir.js';
+import * as khodrobank from './sources/khodrobank.js';
 
-export const SOURCES = [bama, divar, hamrah];
+// DISABLED_SOURCES=khodro45,carir: خاموش کردن یک یا چند منبع
+const disabled = new Set(String(process.env.DISABLED_SOURCES || '').split(',').map((s) => s.trim()).filter(Boolean));
+export const SOURCES = [bama, divar, hamrah, khodro45, iranjib, carir, khodrobank].filter((s) => !disabled.has(s.info.id));
 const SOURCE_TIMEOUT = 40_000;
 const MAX_ITEMS = 40;
 
@@ -32,7 +38,7 @@ async function runSource(src, parsed, opts) {
 
 /**
  * نام کامل خودرو از فهرست مدل‌های باما (کش‌شده). اگر کاربر فقط بخشی از نام را گفته باشد
- * («۲۰۶»، «سورن»، «سراتو»)، هر سه سایت با همین نام کامل جستجو می‌شوند تا قیمت‌ها دربارهٔ یک خودرو باشند.
+ * («۲۰۶»، «سورن»، «سراتو»)، همهٔ سایت‌ها با همین نام کامل جستجو می‌شوند تا قیمت‌ها دربارهٔ یک خودرو باشند.
  */
 async function canonicalize(query) {
   try {

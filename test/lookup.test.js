@@ -17,7 +17,8 @@ test('پرسش گفتاری کامل: هر سه سایت پاسخ می‌دهن�
   const r = await lookupAll('قیمت پژو دویست و شش تیپ دو مدل هزار و چهارصد');
   assert.equal(r.query.carText, 'پژو 206 تیپ 2');
   assert.equal(r.query.year.value, 1400);
-  for (const s of r.sources) assert.ok(s.ok, `${s.id}: ${s.error}`);
+  // بازار نمونهٔ پیش‌فرض فقط سه سایت اصلی را دارد (منبع‌های دیگر در test/newsources.test.js)
+  for (const s of r.sources.filter((x) => ['bama', 'divar', 'hamrah'].includes(x.id))) assert.ok(s.ok, `${s.id}: ${s.error}`);
   assert.equal(r.sources.find((s) => s.id === 'bama').matched.id, 'peugeot,206ir,type2');
   assert.equal(r.sources.find((s) => s.id === 'hamrah').matched.id, 'irankhodro/peugeot206');
   // دیوار: فقط تیپ ۲ مدل ۱۴۰۰ با قیمت؛ ۲۰۷، تیپ ۵، خریدار و رینگ حذف شده‌اند

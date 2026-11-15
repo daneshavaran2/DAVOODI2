@@ -1,5 +1,6 @@
 // حالت نمایشی و آزمون: به جای اینترنت، از «بازار نمونه» (test/fixtures/market.json) پاسخ‌هایی
-// با همان ساختار پاسخ واقعی باما، دیوار و همراه مکانیک می‌سازد. قیمت‌ها واقعی نیستند.
+// با همان ساختار پاسخ واقعی باما، دیوار و همراه مکانیک می‌سازد (و با extra: true، ایران‌جیب، car.ir،
+// خودروبانک و خودرو۴۵). قیمت‌ها واقعی نیستند.
 // جستجوی دیوار مثل نسخهٔ واقعی «متنی» است: هر آگهی که کلمه‌ای مشترک با پرسش داشته باشد برمی‌گردد
 // (خودروهای دیگر و آگهی‌های بی‌ربط هم)، تا صافی‌های برنامه واقعاً آزموده شوند.
 
@@ -232,13 +233,124 @@ function hamrah(url) {
   return pp ? respond({ pageProps: pp }) : respond({}, 404);
 }
 
+// ---------------------------------------------------------------- منبع‌های دیگر (extra)
+
+const html = (body, title = '') =>
+  new Response(`<!doctype html><html lang="fa"><head><title>${title}</title></head><body>${body}</body></html>`, {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  });
+
+/** خودروهای صفر بازار نمونه، هر تیپ یک سطر: { maker, name, market, factory } */
+function newCarRows() {
+  const out = [];
+  for (const car of market.cars) {
+    const maker = car.hamrah.brand === 'saipa' ? 'سایپا' : car.hamrah.brand === 'kia' ? 'کیا' : 'ایران خودرو';
+    for (const p of car.prices.filter((x) => x.new && x.market)) out.push({ maker, name: titleOf(car, p), market: p.market, factory: p.factory || null });
+  }
+  return out;
+}
+
+// ایران‌جیب: جدول قدیمی با سطر خودروساز (catsection) و سرستون؛ قیمت‌ها به تومان
+function iranjib(url) {
+  const path = decodeURIComponent(url.pathname);
+  if (path.startsWith('/showgroup/46/')) return html('<table class="items_table"><tr><th>نام خودرو</th><th>قیمت بازار</th><th>قیمت نمایندگی</th></tr></table>');
+  if (!path.startsWith('/showgroup/45/')) return html('<p>صفحه پیدا نشد</p>', 'ایران‌جیب');
+  let rows = '';
+  let maker = '';
+  for (const r of newCarRows()) {
+    if (r.maker !== maker) {
+      maker = r.maker;
+      rows += `<tr class="catsection"><td colspan="3">${maker}</td></tr>`;
+    }
+    rows += `<tr><td class="name"><a href="#">${toFaDigits(r.name)}</a></td><td>${sep(r.market + 20e6)}</td><td>${r.factory ? sep(r.factory) : '-'}</td></tr>`;
+  }
+  return html(
+    `<h1>قیمت خودرو تولید داخل (تومان)</h1><table class="items_table"><tr><th>نام خودرو</th><th>قیمت بازار (تومان)</th><th>قیمت نمایندگی (تومان)</th></tr>${rows}</table>`,
+    'قیمت خودرو تولید داخل - ایران جیب',
+  );
+}
+
+// car.ir: جدول به «میلیون تومان» با رقم فارسی و سال در نام
+function carir(url) {
+  if (url.pathname === '/prices2') return html('<p>به‌زودی</p>');
+  if (url.pathname !== '/prices') return html('<p>خانه</p>', 'کار');
+  const rows = newCarRows()
+    .map(
+      (r) =>
+        `<tr><td>${toFaDigits(`${r.name} مدل 1405`)}</td><td>${toFaDigits(sep(Math.round((r.market - 10e6) / 1e6)))}</td><td>${r.factory ? toFaDigits(sep(Math.round(r.factory / 1e6))) : 'ـ'}</td><td>+۰٫۵٪</td></tr>`,
+    )
+    .join('');
+  return html(
+    `<div class="prices"><table><thead><tr><th>خودرو</th><th>قیمت بازار (میلیون تومان)</th><th>قیمت کارخانه (میلیون تومان)</th><th>تغییر</th></tr></thead><tbody>${rows}</tbody></table></div>`,
+    'قیمت روز خودرو | کار',
+  );
+}
+
+// خودروبانک: صفحهٔ اول پیوند «قیمت روز خودرو» دارد؛ صفحهٔ قیمت داده را در __NEXT_DATA__ می‌گذارد
+function khodrobank(url) {
+  if (url.pathname === '/') {
+    return html('<nav><a href="/news">اخبار</a> <a href="/car-price/">قیمت روز خودرو</a></nav><p>اخبار خودرو</p>', 'خودروبانک');
+  }
+  if (url.pathname !== '/car-price/') return html('<p>پیدا نشد</p>');
+  const byMaker = {};
+  for (const r of newCarRows()) (byMaker[r.maker] ||= []).push({ name: r.name, marketPrice: r.market - 30e6, factoryPrice: r.factory, unit: 'toman' });
+  const data = { props: { pageProps: { priceList: Object.entries(byMaker).map(([brandName, cars]) => ({ brandName, cars })) } }, page: '/car-price' };
+  return html(`<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(data)}</script>`, 'قیمت روز خودرو - خودروبانک');
+}
+
+// خودرو۴۵: آگهی‌های کارشناسی‌شده (JSON، تومان)
+function khodro45Results() {
+  const out = [];
+  let n = 0;
+  for (const car of market.cars) {
+    const [brandFa, ...modelFa] = car.title.split(' ');
+    for (const p of car.prices) {
+      const base = p.new ? p.market : (p.bama || [])[0] || p.hamrah;
+      if (!base) continue;
+      n++;
+      out.push({
+        slug: `K${n}`.padEnd(6, 'X'),
+        price: base,
+        final_price: base + 15e6,
+        price_type: 2,
+        car_properties: {
+          brand: { title: brandFa, title_en: car.value.split(',')[0], seo_slug: car.value.split(',')[0] },
+          model: { title: modelFa.join(' '), title_en: car.value.split(',')[1], seo_slug: car.value.split(',')[1] },
+          trim: trimOf(car, p)?.fa || '',
+          option: '',
+          year: String(p.year),
+        },
+        city: { title: 'تهران', title_en: 'Tehran' },
+        car_specifications: { klm: p.new ? 0 : 85000 + n * 1000 },
+      });
+    }
+  }
+  return out;
+}
+
+function khodro45(url) {
+  if (url.pathname !== '/api/v2/car_listing/') return html('<p>خودرو۴۵</p>');
+  const qTok = tokens(toEnDigits(url.searchParams.get('search') || ''));
+  const hits = khodro45Results().filter((r) => {
+    const tTok = tokens(`${r.car_properties.brand.title} ${r.car_properties.model.title}`);
+    return qTok.length && qTok.every((q) => tTok.includes(q));
+  });
+  const offset = Number(url.searchParams.get('offset') || 0);
+  const limit = Number(url.searchParams.get('limit') || 12);
+  return respond({ count: hits.length, next: null, previous: null, results: hits.slice(offset, offset + limit) });
+}
+
 /** نام کامل خودروها و برآوردهای درست بازار نمونه، برای آزمون‌ها. */
 export function demoMarket() {
   return market;
 }
 
-/** fetch جعلی که درخواست‌های سه سایت را از بازار نمونه جواب می‌دهد. */
-export function createDemoFetch({ delay = 0, fail = [] } = {}) {
+/**
+ * fetch جعلی که درخواست‌های سایت‌ها را از بازار نمونه جواب می‌دهد.
+ * extra: ایران‌جیب، car.ir، خودروبانک و خودرو۴۵ هم (بدون آن، فقط سه سایت اصلی و بقیه ۴۰۴).
+ */
+export function createDemoFetch({ delay = 0, fail = [], extra = false } = {}) {
   return async (input, init = {}) => {
     const url = new URL(typeof input === 'string' ? input : input.url);
     if (delay) await new Promise((r) => setTimeout(r, delay));
@@ -250,6 +362,12 @@ export function createDemoFetch({ delay = 0, fail = [] } = {}) {
     if (url.host === 'bama.ir') return bama(url);
     if (url.host === 'api.divar.ir') return divar(url, init);
     if (url.host === 'www.hamrah-mechanic.com') return hamrah(url);
+    if (extra) {
+      if (url.host === 'www.iranjib.ir') return iranjib(url);
+      if (url.host === 'car.ir') return carir(url);
+      if (url.host === 'www.khodrobank.com') return khodrobank(url);
+      if (url.host === 'khodro45.com') return khodro45(url);
+    }
     return respond({}, 404);
   };
 }
