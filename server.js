@@ -18,6 +18,10 @@ import { download, ensureModel } from './src/model.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
+// پورت‌های اضافه (مثلاً 80,8080 در Docker): اگر سکو ترافیک را به پورتی جز PORT بفرستد، باز هم کار کند
+const EXTRA_PORTS = [...new Set(String(process.env.EXTRA_PORTS || '').split(',').map(Number))].filter(
+  (p) => p > 0 && p < 65536 && p !== PORT,
+);
 const DEMO = process.env.DEMO === '1' || process.argv.includes('--demo');
 const PUBLIC = fileURLToPath(new URL('./public/', import.meta.url));
 const RATE_LIMIT = Number(process.env.RATE_LIMIT) || 20; // درخواست قیمت در دقیقه برای هر IP
@@ -135,7 +139,16 @@ async function serveStatic(req, res, pathname) {
   }
 }
 
-export const server = http.createServer(async (req, res) => {
+// برای عیب‌یابی استقرار (مثلاً خطای 502 لیارا): آیا درخواستی از بیرون کانتینر به برنامه می‌رسد و روی کدام پورت؟
+// فقط سه درخواست اول ثبت می‌شود؛ درخواست‌های داخلی (health check روی 127.0.0.1) حساب نمی‌شوند.
+let externalLogged = 0;
+
+async function handle(req, res) {
+  const ip = req.socket.remoteAddress || '';
+  if (externalLogged < 3 && !/^(::ffff:)?127\.|^::1$/.test(ip)) {
+    externalLogged++;
+    console.log(`درخواست از بیرون رسید: ${req.method} ${String(req.url).slice(0, 80)} (پورت ${req.socket.localPort})`);
+  }
   try {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/api/transcribe') {
@@ -191,12 +204,20 @@ export const server = http.createServer(async (req, res) => {
     console.error(e);
     return send(res, 500, { error: 'خطای داخلی سرور.' });
   }
-});
+}
+
+export const server = http.createServer(handle);
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
+  for (const p of EXTRA_PORTS) {
+    const extra = http.createServer(handle);
+    extra.on('error', (e) => console.log(`پورت اضافهٔ ${p} در دسترس نیست (${e.code})؛ مهم نیست اگر سکو از پورت ${PORT} استفاده کند.`));
+    extra.listen(p, HOST, () => console.log(`همچنین روی ${HOST}:${p} گوش می‌دهد.`));
+  }
   server.listen(PORT, HOST, async () => {
-    console.log(`قیمت‌یاب خودرو آماده است: http://localhost:${PORT}${DEMO ? '  (حالت نمایشی — قیمت‌ها واقعی نیستند)' : ''}`);
+    const a = server.address();
+    console.log(`قیمت‌یاب خودرو آماده است: روی ${a.address}:${a.port} گوش می‌دهد${DEMO ? '  (حالت نمایشی — قیمت‌ها واقعی نیستند)' : ''}`);
     const s = await sttStatus();
     if (s.available) return console.log(`تشخیص گفتار روی سرور: فعال (${s.modelName})`);
     if (s.bin && !s.model && !DEMO && !s.disabledReason) {
