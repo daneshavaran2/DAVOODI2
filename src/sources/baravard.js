@@ -5,7 +5,7 @@
 // صفحه‌های اول و «pricing» سایت ساخته می‌شود (هر ۶ ساعت)، سپس صفحهٔ تیپِ پیدا‌شده با سال خواسته‌شده خوانده می‌شود.
 
 import { HOUR, request, SourceError } from '../http.js';
-import { normalize } from '../text.js';
+import { normalize, toEnDigits } from '../text.js';
 import { decodeEntities, matchRows, parseMoney, stripTags } from './pricetable.js';
 
 export const SITE = 'https://baravard.com';
@@ -150,6 +150,35 @@ export function parsePricingPage(html) {
   }
   if (low && high && high < low) [low, high] = [high, low];
   return { low, high, price };
+}
+
+// ---------------------------------------------------------------- خودروهای هم‌رده
+
+/** پیوندهای خودروهای دیگر در صفحهٔ هم‌رده‌ها (/opponent/{شناسه}/{نام}) ← [{ id, name, price }] */
+export function parseOpponentPage(html, selfId = null) {
+  const out = new Map();
+  const re = /href="(?:https?:\/\/(?:www\.)?baravard\.com)?\/(?:pricing|opponent)\/(\d+)\/([^"?#\s]+)[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
+  for (const m of String(html).matchAll(re)) {
+    const id = m[1];
+    if (id === String(selfId) || out.has(id)) continue;
+    const text = stripTags(m[3]);
+    // اگر قیمت داخل همان پیوند آمده، جدا شود (تبدیل رقم یک‌به‌یک است، پس جای متن عوض نمی‌شود)
+    const money = toEnDigits(text).match(/(\d[\d,٬٫.]*\s*(?:میلیارد|میلیون)?(?:\s*و\s*\d[\d,٬٫.]*\s*میلیون)?)\s*تومان/);
+    const name = (money ? text.slice(0, money.index) : text).replace(/قیمت|مقایسه|مشاهده/g, '').trim();
+    const finalName = /[\u0600-\u06FFa-zA-Z]{2}/.test(name) && name.length <= 80 ? name : slugName(decodeEntities(m[2]));
+    out.set(id, { id, name: finalName, price: money ? parseMoney(`${money[1]} تومان`) : null });
+  }
+  return [...out.values()];
+}
+
+/** خودروهای هم‌رده با این خودرو، از صفحهٔ «رقبا»ی همان تیپ */
+export async function opponents({ canonical = null, carText = '' } = {}) {
+  if (canonical?.level === 'brand') return [];
+  const entries = await catalog();
+  const [m] = matchRows(entries.map((e) => ({ group: '', name: e.name, e })), { canon: canonical, carText });
+  if (!m) return [];
+  const html = await page(`${SITE}/opponent/${m.e.id}/${m.e.slug}`, 6 * HOUR);
+  return parseOpponentPage(html, m.e.id);
 }
 
 // ---------------------------------------------------------------- جستجو

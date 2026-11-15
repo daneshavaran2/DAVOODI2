@@ -12,4 +12,4 @@ const src = createPriceListSource({
   envVar: 'KHODROBANK_URLS',
 });
 
-export const { info, lookup, _reset } = src;
+export const { info, lookup, rows, _reset } = src;

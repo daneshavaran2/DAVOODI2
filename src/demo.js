@@ -362,6 +362,19 @@ function baravard(url) {
     const links = url.pathname === '/pricing' ? trims.map((t) => `<li><a href="/pricing/${t.id}/${t.slug}">${toFaDigits(t.name)}</a></li>`).join('') : '';
     return html(`<nav><a href="/pricing">قیمت خودرو</a></nav><ul>${links}</ul>`, 'برآورد');
   }
+  const opp = url.pathname.match(/^\/opponent\/(\d+)\//);
+  if (opp) {
+    // هم‌رده‌ها: تیپ‌های خودروهای دیگر با قیمت صفر تا ۲۵٪ بالا یا پایین‌تر
+    const self = trims.find((x) => x.id === opp[1]);
+    if (!self) return html('<p>پیدا نشد</p>');
+    const priceOf = (t) => t.car.prices.find((p) => (p.trim || '') === t.trim && p.new)?.market || null;
+    const ref = priceOf(self);
+    const rivals = trims.filter((t) => t.car !== self.car && ref && priceOf(t) && Math.abs(priceOf(t) - ref) / ref <= 0.25);
+    const cards = rivals
+      .map((t) => `<div class="card"><a href="/pricing/${t.id}/${t.slug}">${toFaDigits(t.name)}</a><span>${toFaDigits(sep(priceOf(t) + 30e6))} تومان</span></div>`)
+      .join('');
+    return html(`<h1>رقبای ${toFaDigits(self.name)}</h1><a href="/pricing/${self.id}/${self.slug}">${toFaDigits(self.name)}</a>${cards}`);
+  }
   const m = url.pathname.match(/^\/pricing\/(\d+)\//);
   const t = m && trims.find((x) => x.id === m[1]);
   if (!t) return html('<p>پیدا نشد</p>');

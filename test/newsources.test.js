@@ -224,3 +224,41 @@ test('منبع دیگر: نام و نشانی سایت در پاسخ نمی‌آ
   const noYear = await lookupAll('سمند سورن پلاس کارکرده');
   assert.match(noYear.sources.find((s) => s.id === 'other').warnings[0], /سال/);
 });
+
+test('هم‌رده‌ها: پیوندهای صفحهٔ رقبا (بدون خود خودرو)، با قیمت داخل پیوند اگر باشد', () => {
+  const html = `<h1>رقبا</h1><a href="/pricing/623/self">بی ام و سری 3</a>
+    <a href="/opponent/700/%D8%A8%D9%86%D8%B2-c200">بنز C200 <b>۴٫۲ میلیارد تومان</b></a>
+    <a href="https://baravard.com/pricing/701/audi-a4">آئودی A4</a><a href="/pricing/701/x">تکراری</a>`;
+  assert.deepEqual(other.parseOpponentPage(html, '623'), [
+    { id: '700', name: 'بنز C200', price: 4.2 * B },
+    { id: '701', name: 'آئودی A4', price: null },
+  ]);
+});
+
+test('خودروهای هم‌رده: از صفحهٔ رقبا با قیمت صفر از جدول‌ها؛ وگرنه خودروهای هم‌قیمت', async () => {
+  const { findRivals, similarPriced } = await import('../src/rivals.js');
+  useMarket();
+  const r = await findRivals('سمند سورن پلاس');
+  assert.equal(r.basis, 'class');
+  assert.equal(r.car, 'سمند سورن پلاس');
+  assert.ok(r.rivals.length >= 3);
+  assert.ok(r.rivals.every((x) => x.name && x.price > 1 * B), JSON.stringify(r.rivals));
+  assert.ok(!r.rivals.some((x) => /سورن/.test(x.name)), 'خود خودرو نیست');
+  assert.doesNotMatch(JSON.stringify(r), /baravard/i, 'نام منبع دیگر در پاسخ نیست');
+  assert.ok(r.rivals.some((x) => /^پژو ۲۰۶ SD V[8۸]$/.test(x.name)), 'نام با همان شکل اصلی (حروف بزرگ لاتین)');
+
+  useMarket({ fail: ['baravard.com'] });
+  const f = await findRivals('سمند سورن پلاس');
+  assert.equal(f.basis, 'price');
+  assert.ok(f.rivals.length >= 1);
+  assert.ok(f.rivals.every((x) => Math.abs(x.price - 3 * B) / (3 * B) <= 0.15));
+
+  const rows = [
+    { group: '', name: 'پژو 206 تیپ 2', market: 2.34 * B },
+    { group: '', name: 'پژو 206 تیپ 5', market: 2.61 * B },
+    { group: '', name: 'شاهین G', market: 2.2 * B },
+    { group: '', name: 'سمند سورن پلاس', market: 2.3 * B },
+    { group: '', name: 'هایما S7', market: 9 * B },
+  ];
+  assert.deepEqual(similarPriced(rows, 2.3 * B, 'سمند سورن پلاس').map((x) => x.name), ['پژو 206 تیپ 2', 'شاهین G']);
+});

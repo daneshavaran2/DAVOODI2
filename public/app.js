@@ -6,7 +6,6 @@ const micLabel = $('#micLabel');
 const micStatus = $('#micStatus');
 const form = $('#queryForm');
 const input = $('#q');
-const citySel = $('#city');
 const results = $('#results');
 
 // ---------------------------------------------------------------- قالب‌بندی
@@ -49,7 +48,7 @@ const yearLabel = (k) => (k === 'new' ? 'صفر کیلومتر' : `مدل ${fa(k
 
 // ---------------------------------------------------------------- تنظیمات
 
-let config = { demo: false, cities: {}, stt: { server: false } };
+let config = { demo: false, stt: { server: false } };
 const configReady = fetch('/api/config')
   .then((r) => r.json())
   .then((c) => {
@@ -57,25 +56,9 @@ const configReady = fetch('/api/config')
     const banner = $('#demoBanner');
     banner.hidden = !c.demo;
     if (c.stt?.demo) banner.textContent += ' تشخیص گفتار هم نمایشی است: هر چه بگویید، یک جملهٔ نمونه برمی‌گردد.';
-    for (const [id, name] of Object.entries(c.cities || {})) {
-      const o = document.createElement('option');
-      o.value = id;
-      o.textContent = name;
-      citySel.append(o);
-    }
-    try {
-      const saved = localStorage.getItem('city');
-      if (saved && [...citySel.options].some((o) => o.value === saved)) citySel.value = saved;
-    } catch {}
   })
   .catch(() => {})
   .finally(setupVoice);
-
-citySel.addEventListener('change', () => {
-  try {
-    localStorage.setItem('city', citySel.value);
-  } catch {}
-});
 
 // ---------------------------------------------------------------- تشخیص گفتار
 // حالت «server»: صدا ضبط و به /api/transcribe فرستاده می‌شود (whisper روی سرور؛ همهٔ مرورگرها).
@@ -317,45 +300,6 @@ form.addEventListener('submit', (e) => {
   search(q);
 });
 
-function chipSearch(e) {
-  const chip = e.target.closest('.chip');
-  if (!chip) return;
-  input.value = chip.dataset.q || chip.textContent.trim();
-  search(input.value);
-}
-
-// ---------------------------------------------------------------- جستجوهای اخیر (فقط در همین مرورگر)
-
-const recentBox = $('#recent');
-const RECENT_KEY = 'recent-searches';
-
-function loadRecent() {
-  try {
-    const list = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
-    return Array.isArray(list) ? list.filter((x) => typeof x === 'string' && x.length <= 200).slice(0, 5) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveRecent(q) {
-  const list = [q, ...loadRecent().filter((x) => x !== q)].slice(0, 5);
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
-  } catch {}
-  renderRecent();
-}
-
-function renderRecent() {
-  const list = loadRecent();
-  recentBox.hidden = !list.length;
-  recentBox.innerHTML = list.length
-    ? `<span class="examples-label"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-clock"/></svg>اخیر</span>` +
-      list.map((q) => `<button type="button" class="chip" data-q="${esc(q)}">${esc(fa(q))}</button>`).join('')
-    : '';
-}
-recentBox.addEventListener('click', chipSearch);
-renderRecent();
 
 // ---------------------------------------------------------------- نوار پایین گوشی
 
@@ -382,16 +326,26 @@ $('#dockMic').addEventListener('click', () => {
   micBtn.click(); // در همان لمس کاربر، تا مرورگر اجازهٔ میکروفون را بدهد
   toTop();
 });
-$('#dockType').addEventListener('click', () => {
+const DEFAULT_STATUS = micStatus.textContent;
+
+/** پاک کردن نتیجه و نام قبلی، برای نوشتن یا گفتن نام خودروی تازه */
+function newSearch() {
+  controller?.abort();
+  input.value = '';
+  results.innerHTML = '';
+  results.setAttribute('aria-busy', 'false');
+  history.replaceState(null, '', location.pathname);
+  if (!micUnavailable) setStatus(DEFAULT_STATUS);
+  updateDock();
   input.focus({ preventScroll: true });
-  input.select();
   toTop();
-});
+}
+$('#dockNew').addEventListener('click', newSearch);
 
 async function search(q) {
   controller?.abort();
   controller = new AbortController();
-  const params = new URLSearchParams({ q, city: citySel.value || 'all' });
+  const params = new URLSearchParams({ q });
   history.replaceState(null, '', `?q=${encodeURIComponent(q)}`);
   renderLoading();
   try {
@@ -399,7 +353,6 @@ async function search(q) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `خطای سرور (${res.status})`);
     render(data);
-    if (data.summary) saveRecent(q);
     updateDock();
   } catch (err) {
     if (err.name === 'AbortError') return;
@@ -475,31 +428,6 @@ function carMeta(data) {
   return asked || (data.summary?.label ? fa(data.summary.label) : '');
 }
 
-function shareText(data) {
-  const s = data.summary;
-  const meta = carMeta(data);
-  const range = s.low && s.high && s.low !== s.high ? `\nبازه: ${short(s.low)} تا ${short(s.high)} تومان` : '';
-  return `قیمت حدودی امروز ${fa(carName(data))}${meta ? `، ${meta}` : ''}: ${toman(s.estimate)}${range}\n(از ${fa(s.sources.length)} سایت قیمت خودرو)`;
-}
-
-async function share(btn, text) {
-  const url = location.href;
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: 'قیمت‌یاب خودرو', text, url });
-    } catch {}
-    return;
-  }
-  const label = btn.querySelector('span');
-  try {
-    await navigator.clipboard.writeText(`${text}\n${url}`);
-    label.textContent = 'کپی شد؛ در پیام‌رسان بچسبانید';
-  } catch {
-    label.textContent = 'کپی ممکن نشد';
-  }
-  setTimeout(() => (label.textContent = 'ارسال قیمت'), 2500);
-}
-
 function verdictHead(data) {
   const q = data.query;
   const name = carName(data);
@@ -527,7 +455,12 @@ function verdictCard(data) {
   const speakBtn = faVoice
     ? `<button type="button" class="speak" data-say="${esc(`قیمت حدودی ${toman(s.estimate)}`)}"><svg aria-hidden="true"><use href="#i-speak"/></svg><span>بلند بخوان</span></button>`
     : '';
-  const actions = `<div class="verdict-actions"><button type="button" class="speak share"><svg aria-hidden="true"><use href="#i-share"/></svg><span>ارسال قیمت</span></button>${speakBtn}</div>`;
+  const actions = `
+      <div class="verdict-actions">
+        <button type="button" class="speak rivals-btn"><svg aria-hidden="true"><use href="#i-cars"/></svg><span>خودروهای هم‌رده</span></button>
+        <button type="button" class="speak new-btn"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>جستجوی تازه</span></button>
+        ${speakBtn}
+      </div>`;
   return `
     <article class="verdict">
       ${verdictHead(data)}
@@ -638,6 +571,57 @@ function sourceCard(s) {
     </details>`;
 }
 
+// ---------------------------------------------------------------- خودروهای هم‌رده
+
+async function showRivals(data) {
+  const existing = $('#rivals');
+  if (existing) return existing.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+  const card = document.createElement('section');
+  card.className = 'card rivals';
+  card.id = 'rivals';
+  card.setAttribute('aria-live', 'polite');
+  card.innerHTML = `<h2>خودروهای هم‌رده</h2><p class="sub">در حال پیدا کردن خودروهای هم‌رده…</p><div class="skeleton short"></div>`;
+  results.querySelector('.verdict')?.after(card);
+  card.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+
+  const s = data.summary;
+  const ref = data.newCar?.estimate || (s?.key === 'new' ? s.estimate : '');
+  const yearSuffix = data.query.year ? ` مدل ${data.query.year.value}` : '';
+  try {
+    const res = await fetch(`/api/rivals?${new URLSearchParams({ q: carName(data), ref: ref || '' })}`);
+    const r = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(r.error || `خطای سرور (${res.status})`);
+    if (!r.rivals?.length) {
+      card.innerHTML = `<h2>خودروهای هم‌رده</h2><p class="sub">برای این خودرو، خودروی هم‌رده‌ای پیدا نشد.</p>`;
+      return;
+    }
+    const sub =
+      r.basis === 'class'
+        ? 'خودروهایی در همین رده. قیمت‌ها برای صفر کیلومتر است؛ برای قیمت کامل هر کدام، رویش بزنید.'
+        : 'خودروهای صفری که قیمت روزشان نزدیک به همین خودرو است. برای قیمت کامل هر کدام، رویش بزنید.';
+    card.innerHTML = `
+      <h2>خودروهای هم‌رده</h2>
+      <p class="sub">${sub}</p>
+      <ul class="rival-list">${r.rivals
+        .map(
+          (x) => `<li><button type="button" class="rival" data-q="${esc(`${x.name}${yearSuffix}`)}">
+            <span class="rival-name">${esc(fa(x.name))}</span>
+            <span class="rival-price">${x.price ? short(x.price) : '—'}</span>
+            <svg class="chev-side" aria-hidden="true"><use href="#i-chev"/></svg>
+          </button></li>`,
+        )
+        .join('')}</ul>`;
+    card.querySelectorAll('.rival').forEach((b) =>
+      b.addEventListener('click', () => {
+        input.value = b.dataset.q;
+        search(b.dataset.q);
+      }),
+    );
+  } catch (e) {
+    card.innerHTML = `<h2>خودروهای هم‌رده</h2><p class="sub error-box">${esc(e.message || 'پیدا کردن خودروهای هم‌رده ممکن نشد.')}</p>`;
+  }
+}
+
 const priced = (s) => (s.items || []).some((i) => i.price > 0);
 
 function sourcesCard(list) {
@@ -676,8 +660,9 @@ function render(data) {
   }
 
   results.innerHTML = main + hintsCard(data) + yearsCard(data) + factoryCard(data) + sourcesCard(data.sources);
-  results.querySelector('.speak:not(.share)')?.addEventListener('click', (e) => speak(e.currentTarget.dataset.say));
-  results.querySelector('.share')?.addEventListener('click', (e) => share(e.currentTarget, shareText(data)));
+  results.querySelector('.speak[data-say]')?.addEventListener('click', (e) => speak(e.currentTarget.dataset.say));
+  results.querySelector('.new-btn')?.addEventListener('click', newSearch);
+  results.querySelector('.rivals-btn')?.addEventListener('click', () => showRivals(data));
   results.querySelectorAll('.hint-chip').forEach((b) =>
     b.addEventListener('click', () => {
       input.value = b.dataset.q;

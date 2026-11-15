@@ -314,7 +314,6 @@ h1 {
 .go:hover { background: #d8b885; }
 .go:active { transform: translateY(1px); }
 
-.ask-foot { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px; }
 
 .examples { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; }
 .examples-label { display: inline-flex; align-items: center; gap: 6px; color: var(--night-ink-2); font-size: 1.0625rem; margin-inline-end: 2px; }
@@ -339,16 +338,6 @@ h1 {
 }
 .cockpit .chip:hover { border-color: rgb(236 216 174 / 0.6); background: rgb(255 255 255 / 0.06); color: #fff; }
 
-.city { display: inline-flex; align-items: center; gap: 10px; color: var(--night-ink-2); font-size: 1.0625rem; }
-.city select {
-  height: 46px;
-  padding: 0 14px;
-  border: 1px solid var(--night-line);
-  border-radius: 12px;
-  background: var(--night);
-  color: var(--night-ink);
-  font-size: 1.0625rem;
-}
 
 /* ---------------------------------------------------------------- نتیجه */
 
@@ -505,6 +494,30 @@ tr.is-target td:last-child { border-radius: 10px 0 0 10px; }
 .note.bad { background: var(--bad-soft); color: var(--bad); }
 .verdict-head .note { margin: 12px 0 0; }
 
+/* ---------------------------------------------------------------- خودروهای هم‌رده */
+
+.rival-list { list-style: none; margin: 0; padding: 0; }
+.rival-list li + li { border-top: 1px solid var(--line); }
+.rival {
+  width: calc(100% + 20px);
+  min-height: 60px;
+  margin: 0 -10px;
+  padding: 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: start;
+  font-size: 1.0625rem;
+  transition: background 0.18s ease;
+}
+.rival:hover { background: var(--surface-2); }
+.rival-name { flex: 1; min-width: 0; font-weight: 600; }
+.rival-price { font-weight: 700; white-space: nowrap; color: var(--ink-2); }
+.chev-side { width: 20px; height: 20px; color: var(--ink-3); transform: rotate(90deg); }
+
 /* ---------------------------------------------------------------- جزئیات هر منبع */
 
 .sources .sub { margin-bottom: 4px; }
@@ -631,23 +644,6 @@ body.has-dock { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
   .bar-note { display: none; }
   .ask { padding-top: 8px; padding-bottom: 32px; gap: 16px; }
   h1 { font-size: 1.75rem; }
-  /* نمونه‌ها و جستجوهای اخیر: یک ردیف که با انگشت کنار می‌رود */
-  .ask-foot { gap: 14px; }
-  .ask-foot .examples {
-    width: calc(100% + 2 * var(--gutter, 16px));
-    margin-inline: calc(-1 * var(--gutter, 16px));
-    padding-inline: var(--gutter, 16px);
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scroll-snap-type: x proximity;
-    scrollbar-width: none;
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 40px);
-    mask-image: linear-gradient(to right, transparent 0, #000 40px);
-  }
-  .ask-foot .examples::-webkit-scrollbar { display: none; }
-  .ask-foot .chip, .ask-foot .examples-label { flex: none; scroll-snap-align: start; }
   .years th:nth-child(3), .years td:nth-child(3) { display: none; }
   .verdict-actions .speak { flex: 1; justify-content: center; }
   .mic { width: 136px; height: 136px; }

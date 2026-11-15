@@ -1,7 +1,8 @@
 // سرور وب: صفحهٔ برنامه (public/) و API قیمت.
 //   GET /api/price?q=پژو 206 مدل 1400&city=all|1|2...
 //   POST /api/transcribe   صدای WAV (۱۶kHz تک‌کاناله) ← متن فارسی با whisper.cpp روی همین سرور
-//   GET /api/diagnose      وضعیت دسترسی به سه سایت
+//   GET /api/rivals?q=...&ref=...  خودروهای هم‌رده (و قیمت صفر هر کدام)
+//   GET /api/diagnose      وضعیت دسترسی به سایت‌ها
 //   GET /api/health
 // اجرا: node server.js   (پورت با PORT، حالت نمایشی با DEMO=1)
 
@@ -14,6 +15,7 @@ import { setFetch } from './src/http.js';
 import { lookupAll, SOURCES } from './src/lookup.js';
 import { CITIES, DEFAULT_CITIES } from './src/sources/divar.js';
 import { diagnose } from './src/diagnose.js';
+import { findRivals } from './src/rivals.js';
 import { LIMITS, parseWav, SttError, sttStatus, transcribe } from './src/stt.js';
 import { download, ensureModel } from './src/model.js';
 
@@ -194,6 +196,16 @@ async function handle(req, res) {
       }
       const result = await lookupAll(q, { cities: citiesParam(url.searchParams.get('city')) });
       return send(res, 200, { demo: DEMO, ...result }, { 'Cache-Control': 'no-store' });
+    }
+
+    if (url.pathname === '/api/rivals') {
+      const q = (url.searchParams.get('q') || '').trim();
+      if (!q || q.length > 200) return send(res, 400, { error: 'نام خودرو لازم است.' });
+      if (!allowed(clientIp(req))) {
+        return send(res, 429, { error: 'تعداد درخواست‌ها زیاد است؛ یک دقیقه صبر کنید.' }, { 'Retry-After': '60' });
+      }
+      const ref = Number(url.searchParams.get('ref')) || null;
+      return send(res, 200, await findRivals(q, { ref }), { 'Cache-Control': 'no-store' });
     }
 
     if (url.pathname === '/api/diagnose') {

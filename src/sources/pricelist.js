@@ -103,6 +103,10 @@ export function createPriceListSource({ id, name, site, pages = [], discover = t
   return {
     info,
     lookup,
+    /** همهٔ سطرهای قیمت روز این سایت (کش یک‌ساعته) */
+    async rows() {
+      return (await load()).rows;
+    },
     _reset() {
       loaded = null;
     },
