@@ -1,0 +1,8 @@
+{
+  "platform": "docker",
+  "app": "gheymat-khodro",
+  "port": 3000,
+  "build": {
+    "location": "germany"
+  }
+}

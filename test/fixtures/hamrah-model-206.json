@@ -1,0 +1,134 @@
+{
+ "pageProps": {
+  "modelDetail": {
+   "nickName": "پژو 206",
+   "minYear": 1385,
+   "maxYear": 1405
+  },
+  "yearsPriceList": {
+   "lastUpdateTime": "2026-11-13T23:09:19+03:30",
+   "carPriceOtherYearsDetails": [
+    {
+     "brandName": "ایران خودرو",
+     "brandEnglishName": "irankhodro",
+     "modelName": "پژو 206",
+     "modelEnglishName": "peugeot206",
+     "carModelId": 1,
+     "carTypeId": 1,
+     "carYear": 1405,
+     "marketPrice": 2320000000,
+     "existPriceZero": true,
+     "carTypeName": "تیپ 2"
+    },
+    {
+     "brandName": "ایران خودرو",
+     "brandEnglishName": "irankhodro",
+     "modelName": "پژو 206",
+     "modelEnglishName": "peugeot206",
+     "carModelId": 1,
+     "carTypeId": 1,
+     "carYear": 1405,
+     "marketPrice": 2600000000,
+     "existPriceZero": true,
+     "carTypeName": "تیپ 5"
+    },
+    {
+     "brandName": "ایران خودرو",
+     "brandEnglishName": "irankhodro",
+     "modelName": "پژو 206",
+     "modelEnglishName": "peugeot206",
+     "carModelId": 1,
+     "carTypeId": 1,
+     "carYear": 1402,
+     "marketPrice": 2020000000,
+     "existPriceZero": false,
+     "carTypeName": "تیپ 2"
+    },
+    {
+     "brandName": "ایران خودرو",
+     "brandEnglishName": "irankhodro",
+     "modelName": "پژو 206",
+     "modelEnglishName": "peugeot206",
+     "carModelId": 1,
+     "carTypeId": 1,
+     "carYear": 1401,
+     "marketPrice": 1930000000,
+     "existPriceZero": false,
+     "carTypeName": "تیپ 2"
+    },
+    {
+     "brandName": "ایران خودرو",
+     "brandEnglishName": "irankhodro",
+     "modelName": "پژو 206",
+     "modelEnglishName": "peugeot206",
+     "carModelId": 1,
+     "carTypeId": 1,
+     "carYear": 1400,
+     "marketPrice": 1810000000,
+     "existPriceZero": false,
+     "carTypeName": "تیپ 2"
+    },
+    {
+     "brandName": "ایران خودرو",
+     "brandEnglishName": "irankhodro",
+     "modelName": "پژو 206",
+     "modelEnglishName": "peugeot206",
+     "carModelId": 1,
+     "carTypeId": 1,
+     "carYear": 1400,
+     "marketPrice": 2010000000,
+     "existPriceZero": false,
+     "carTypeName": "تیپ 5"
+    },
+    {
+     "brandName": "ایران خودرو",
+     "brandEnglishName": "irankhodro",
+     "modelName": "پژو 206",
+     "modelEnglishName": "peugeot206",
+     "carModelId": 1,
+     "carTypeId": 1,
+     "carYear": 1399,
+     "marketPrice": 1680000000,
+     "existPriceZero": false,
+     "carTypeName": "تیپ 2"
+    },
+    {
+     "brandName": "ایران خودرو",
+     "brandEnglishName": "irankhodro",
+     "modelName": "پژو 206",
+     "modelEnglishName": "peugeot206",
+     "carModelId": 1,
+     "carTypeId": 1,
+     "carYear": 1398,
+     "marketPrice": 1560000000,
+     "existPriceZero": false,
+     "carTypeName": "تیپ 2"
+    },
+    {
+     "brandName": "ایران خودرو",
+     "brandEnglishName": "irankhodro",
+     "modelName": "پژو 206",
+     "modelEnglishName": "peugeot206",
+     "carModelId": 1,
+     "carTypeId": 1,
+     "carYear": 1397,
+     "marketPrice": 1470000000,
+     "existPriceZero": false,
+     "carTypeName": "تیپ 2"
+    },
+    {
+     "brandName": "ایران خودرو",
+     "brandEnglishName": "irankhodro",
+     "modelName": "پژو 206",
+     "modelEnglishName": "peugeot206",
+     "carModelId": 1,
+     "carTypeId": 1,
+     "carYear": 1396,
+     "marketPrice": 1390000000,
+     "existPriceZero": false,
+     "carTypeName": "تیپ 2"
+    }
+   ]
+  }
+ }
+}

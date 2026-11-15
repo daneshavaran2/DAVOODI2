@@ -1,0 +1,60 @@
+{
+ "pageProps": {
+  "pricesList": [
+   {
+    "brandName": "ایران خودرو",
+    "brandEnglishName": "irankhodro",
+    "carPriceDetailsDtos": [
+     {
+      "brandName": "ایران خودرو",
+      "brandEnglishName": "irankhodro",
+      "modelName": "پژو 206",
+      "modelEnglishName": "peugeot206",
+      "carTypeName": "تیپ 2",
+      "nickName": "پژو 206",
+      "carTypeId": 1,
+      "carYear": 1405,
+      "marketPrice": 2320000000,
+      "existPriceZero": true
+     },
+     {
+      "brandName": "ایران خودرو",
+      "brandEnglishName": "irankhodro",
+      "modelName": "پژو 206",
+      "modelEnglishName": "peugeot206",
+      "carTypeName": "تیپ 5",
+      "nickName": "پژو 206",
+      "carTypeId": 1,
+      "carYear": 1405,
+      "marketPrice": 2600000000,
+      "existPriceZero": true
+     },
+     {
+      "brandName": "ایران خودرو",
+      "brandEnglishName": "irankhodro",
+      "modelName": "پژو 207",
+      "modelEnglishName": "peugeot207",
+      "carTypeName": "دنده ای - TU5P",
+      "nickName": "پژو 207",
+      "carTypeId": 1,
+      "carYear": 1405,
+      "marketPrice": 3000000000,
+      "existPriceZero": true
+     },
+     {
+      "brandName": "ایران خودرو",
+      "brandEnglishName": "irankhodro",
+      "modelName": "پژو 2008",
+      "modelEnglishName": "peugeot2008",
+      "carTypeName": "اتوماتیک",
+      "nickName": "پژو 2008",
+      "carTypeId": 1,
+      "carYear": 1405,
+      "marketPrice": 5800000000,
+      "existPriceZero": true
+     }
+    ]
+   }
+  ]
+ }
+}

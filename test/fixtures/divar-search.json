@@ -1,0 +1,288 @@
+{
+ "list_top_widgets": [],
+ "list_widgets": [
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۴۰۰",
+    "token": "dA1",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dA1",
+      "web_info": {
+       "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۴۰۰",
+       "district_persian": "پونک",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "۶۰,۰۰۰ کیلومتر",
+    "middle_description_text": "۱,۸۵۰,۰۰۰,۰۰۰ تومان",
+    "bottom_description_text": "دقایقی پیش در پونک",
+    "image_count": 4,
+    "has_chat": true
+   }
+  },
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۴۰۰",
+    "token": "dA2",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dA2",
+      "web_info": {
+       "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۴۰۰",
+       "district_persian": "تهرانپارس",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "۹۵,۰۰۰ کیلومتر",
+    "middle_description_text": "۱,۷۸۰,۰۰۰,۰۰۰ تومان",
+    "bottom_description_text": "دقایقی پیش در تهرانپارس",
+    "image_count": 4,
+    "has_chat": true
+   }
+  },
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۴۰۰",
+    "token": "dA3",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dA3",
+      "web_info": {
+       "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۴۰۰",
+       "district_persian": "سعادت‌آباد",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "۷۲,۰۰۰ کیلومتر",
+    "middle_description_text": "۱,۸۳۰,۰۰۰,۰۰۰ تومان",
+    "bottom_description_text": "دقایقی پیش در سعادت‌آباد",
+    "image_count": 4,
+    "has_chat": true
+   }
+  },
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۳۹۹",
+    "token": "dA4",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dA4",
+      "web_info": {
+       "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۳۹۹",
+       "district_persian": "نارمک",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "۱۳۰,۰۰۰ کیلومتر",
+    "middle_description_text": "۱,۶۵۰,۰۰۰,۰۰۰ تومان",
+    "bottom_description_text": "دقایقی پیش در نارمک",
+    "image_count": 4,
+    "has_chat": true
+   }
+  },
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۳۹۸",
+    "token": "dA5",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dA5",
+      "web_info": {
+       "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۳۹۸",
+       "district_persian": "جنت‌آباد",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "۱۸۵,۰۰۰ کیلومتر",
+    "middle_description_text": "۱,۵۲۰,۰۰۰,۰۰۰ تومان",
+    "bottom_description_text": "دقایقی پیش در جنت‌آباد",
+    "image_count": 4,
+    "has_chat": true
+   }
+  },
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۴۰۵",
+    "token": "dA6",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dA6",
+      "web_info": {
+       "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۴۰۵",
+       "district_persian": "شهرری",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "کارکرد صفر",
+    "middle_description_text": "۲,۳۰۰,۰۰۰,۰۰۰ تومان",
+    "bottom_description_text": "دقایقی پیش در شهرری",
+    "image_count": 4,
+    "has_chat": true
+   }
+  },
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۴۰۰",
+    "token": "dA7",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dA7",
+      "web_info": {
+       "title": "پژو ۲۰۶ تیپ ۲، مدل ۱۴۰۰",
+       "district_persian": "پونک",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "۸۰,۰۰۰ کیلومتر",
+    "middle_description_text": "توافقی",
+    "bottom_description_text": "دقایقی پیش در پونک",
+    "image_count": 4,
+    "has_chat": true
+   }
+  },
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "پژو ۲۰۶ تیپ ۵، مدل ۱۴۰۰",
+    "token": "dB1",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dB1",
+      "web_info": {
+       "title": "پژو ۲۰۶ تیپ ۵، مدل ۱۴۰۰",
+       "district_persian": "پونک",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "۷۰,۰۰۰ کیلومتر",
+    "middle_description_text": "۲,۰۵۰,۰۰۰,۰۰۰ تومان",
+    "bottom_description_text": "دقایقی پیش در پونک",
+    "image_count": 4,
+    "has_chat": true
+   }
+  },
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "پژو ۲۰۷ دنده‌ای، مدل ۱۴۰۲",
+    "token": "dB2",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dB2",
+      "web_info": {
+       "title": "پژو ۲۰۷ دنده‌ای، مدل ۱۴۰۲",
+       "district_persian": "پونک",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "۴۰,۰۰۰ کیلومتر",
+    "middle_description_text": "۲,۹۰۰,۰۰۰,۰۰۰ تومان",
+    "bottom_description_text": "دقایقی پیش در پونک",
+    "image_count": 4,
+    "has_chat": true
+   }
+  },
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "خریدار پژو ۲۰۶ تیپ ۲",
+    "token": "dB3",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dB3",
+      "web_info": {
+       "title": "خریدار پژو ۲۰۶ تیپ ۲",
+       "district_persian": "پونک",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "کارکرد صفر",
+    "middle_description_text": "توافقی",
+    "bottom_description_text": "دقایقی پیش در پونک",
+    "image_count": 4,
+    "has_chat": true
+   }
+  },
+  {
+   "widget_type": "POST_ROW",
+   "data": {
+    "@type": "type.googleapis.com/widgets.PostRowData",
+    "title": "رینگ و لاستیک پژو ۲۰۶ تیپ ۲",
+    "token": "dB4",
+    "action": {
+     "type": "VIEW_POST",
+     "payload": {
+      "@type": "type.googleapis.com/widgets.ViewPostPayload",
+      "token": "dB4",
+      "web_info": {
+       "title": "رینگ و لاستیک پژو ۲۰۶ تیپ ۲",
+       "district_persian": "پونک",
+       "city_persian": "تهران"
+      }
+     }
+    },
+    "top_description_text": "کارکرد صفر",
+    "middle_description_text": "۱۲,۰۰۰,۰۰۰ تومان",
+    "bottom_description_text": "دقایقی پیش در پونک",
+    "image_count": 4,
+    "has_chat": true
+   }
+  }
+ ],
+ "pagination": {
+  "has_next_page": false,
+  "data": {
+   "@type": "type.googleapis.com/post_list.PaginationData",
+   "page": 2
+  }
+ },
+ "search_id": "demo"
+}

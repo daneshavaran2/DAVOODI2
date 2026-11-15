@@ -1,0 +1,353 @@
+{
+ "metadata": {
+  "total_count": 13,
+  "total_pages": 1,
+  "current_page": 0,
+  "has_next": false,
+  "has_previous": false
+ },
+ "status": true,
+ "errors": [],
+ "data": {
+  "ads": [
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a1",
+     "url": "/car/detail-a1-peugeot-206ir-type2-1400",
+     "title": "پژو، 206",
+     "subtitle": "1400 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1400",
+     "mileage": "98,000 km",
+     "location": "تهران / پونک",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "1,820,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a2",
+     "url": "/car/detail-a2-peugeot-206ir-type2-1400",
+     "title": "پژو، 206",
+     "subtitle": "1400 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1400",
+     "mileage": "61,000 km",
+     "location": "کرج / گوهردشت",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "1,890,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a3",
+     "url": "/car/detail-a3-peugeot-206ir-type2-1400",
+     "title": "پژو، 206",
+     "subtitle": "1400 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1400",
+     "mileage": "140,000 km",
+     "location": "اصفهان",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "1,760,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a4",
+     "url": "/car/detail-a4-peugeot-206ir-type2-1400",
+     "title": "پژو، 206",
+     "subtitle": "1400 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1400",
+     "mileage": "120,000 km",
+     "location": "تهران / پونک",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "1,795,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a5",
+     "url": "/car/detail-a5-peugeot-206ir-type2-1400",
+     "title": "پژو، 206",
+     "subtitle": "1400 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "5 ساعت پیش",
+     "year": "1400",
+     "mileage": "85,000 km",
+     "location": "تهران / پونک",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "950,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a6",
+     "url": "/car/detail-a6-peugeot-206ir-type2-1399",
+     "title": "پژو، 206",
+     "subtitle": "1399 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1399",
+     "mileage": "150,000 km",
+     "location": "مشهد",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "1,660,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a7",
+     "url": "/car/detail-a7-peugeot-206ir-type2-1399",
+     "title": "پژو، 206",
+     "subtitle": "1399 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1399",
+     "mileage": "110,000 km",
+     "location": "تهران / پونک",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "1,700,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a8",
+     "url": "/car/detail-a8-peugeot-206ir-type2-1399",
+     "title": "پژو، 206",
+     "subtitle": "1399 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1399",
+     "mileage": "175,000 km",
+     "location": "شیراز",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "1,620,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a9",
+     "url": "/car/detail-a9-peugeot-206ir-type2-1398",
+     "title": "پژو، 206",
+     "subtitle": "1398 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1398",
+     "mileage": "190,000 km",
+     "location": "تهران / پونک",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "1,540,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a10",
+     "url": "/car/detail-a10-peugeot-206ir-type2-1398",
+     "title": "پژو، 206",
+     "subtitle": "1398 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1398",
+     "mileage": "210,000 km",
+     "location": "تبریز",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "1,500,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a11",
+     "url": "/car/detail-a11-peugeot-206ir-type2-1405",
+     "title": "پژو، 206",
+     "subtitle": "1405 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1405",
+     "mileage": "صفر کیلومتر",
+     "location": "تهران / شهرری",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "2,380,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a12",
+     "url": "/car/detail-a12-peugeot-206ir-type2-1400",
+     "title": "پژو، 206",
+     "subtitle": "1400 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1400",
+     "mileage": "90,000 km",
+     "location": "تهران / پونک",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "installment",
+     "price": "1,850,000,000",
+     "prepayment": "925,000,000",
+     "payment": "0"
+    }
+   },
+   {
+    "type": "ad",
+    "detail": {
+     "type": "car",
+     "code": "a13",
+     "url": "/car/detail-a13-peugeot-206ir-type2-1404",
+     "title": "حواله پژو، 206",
+     "subtitle": "1404 | تیپ 2",
+     "trim": "تیپ 2",
+     "time": "2 ساعت پیش",
+     "year": "1404",
+     "mileage": "صفر کیلومتر",
+     "location": "تهران / پونک",
+     "transmission": "دنده ای",
+     "fuel": "بنزینی",
+     "body_status": "بدون رنگ",
+     "brand": "peugeot",
+     "brand_fa": "پژو"
+    },
+    "price": {
+     "type": "lumpsum",
+     "price": "2,200,000,000",
+     "prepayment": "0",
+     "payment": "0"
+    }
+   }
+  ]
+ }
+}

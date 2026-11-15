@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>قیمت‌یاب خودرو</title>
+  <meta name="description" content="نام و مدل خودرو را بگویید؛ قیمت حدودی امروز را از هفت سایت قیمت خودرو ببینید.">
+  <meta name="theme-color" content="#0e1b2c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="قیمت خودرو">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="preload" href="/fonts/Vazirmatn-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/NotoNaskhArabic-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="demo-banner" id="demoBanner" hidden>
+    حالت نمایشی (برای آزمایش): قیمت‌ها نمونه‌اند، نه قیمت واقعی بازار.
+  </div>
+
+  <header class="cockpit">
+    <div class="bar">
+      <a class="brand" href="/">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-car"/></svg>
+        <span class="brand-name">قیمت‌یاب خودرو</span>
+      </a>
+      <p class="bar-note">قیمت روز از سایت‌های معتبر خودرو</p>
+    </div>
+
+    <section class="ask" aria-labelledby="askTitle">
+      <h1 id="askTitle">نام خودرو را بگویید، قیمت امروزش را ببینید</h1>
+
+      <button class="mic" id="micBtn" type="button" aria-pressed="false" aria-describedby="micStatus">
+        <span class="mic-face">
+          <span class="mic-lamp" aria-hidden="true"></span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-mic"/></svg>
+          <span class="mic-label" id="micLabel">بگویید</span>
+        </span>
+      </button>
+      <p class="mic-status" id="micStatus" aria-live="polite">دکمه را بزنید و نام، تیپ و سال خودرو را بگویید.</p>
+
+      <form class="query" id="queryForm" role="search" autocomplete="off">
+        <label class="visually-hidden" for="q">نام و مدل خودرو</label>
+        <input id="q" name="q" type="search" inputmode="text" enterkeyhint="search"
+               placeholder="یا نام و سال خودرو را بنویسید" maxlength="200" spellcheck="false">
+        <button class="go" type="submit">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-search"/></svg>
+          <span>جستجو</span>
+        </button>
+      </form>
+
+      <div class="ask-foot">
+        <div class="examples recent" id="recent" aria-label="جستجوهای اخیر" hidden></div>
+        <label class="city">
+          <span>آگهی‌های دیوار از</span>
+          <select id="city">
+            <option value="all">شهرهای بزرگ</option>
+          </select>
+        </label>
+      </div>
+    </section>
+  </header>
+
+  <main class="page">
+    <section class="results" id="results" aria-live="polite" aria-busy="false"></section>
+  </main>
+
+  <footer class="foot">
+    <p>منابع: <a href="https://bama.ir" target="_blank" rel="noopener">باما</a>، <a href="https://divar.ir" target="_blank" rel="noopener">دیوار</a>، <a href="https://www.hamrah-mechanic.com" target="_blank" rel="noopener">همراه مکانیک</a>، <a href="https://khodro45.com" target="_blank" rel="noopener">خودرو۴۵</a>، <a href="https://www.iranjib.ir" target="_blank" rel="noopener">ایران‌جیب</a>، <a href="https://car.ir" target="_blank" rel="noopener">car.ir</a> و <a href="https://www.khodrobank.com" target="_blank" rel="noopener">خودروبانک</a>.
+    قیمت‌ها تقریبی‌اند؛ قیمت آگهی‌ها پیشنهاد فروشنده است، نه قیمت نهایی معامله.</p>
+  </footer>
+
+  <!-- روی گوشی، وقتی دکمهٔ بزرگ میکروفون از دید بیرون رفته: پرسش دوباره بدون بالا رفتن -->
+  <nav class="dock" id="dock" aria-label="پرسش دوباره" hidden>
+    <button type="button" class="dock-btn dock-mic" id="dockMic">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-mic"/></svg><span>بگویید</span>
+    </button>
+    <button type="button" class="dock-btn" id="dockType">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-search"/></svg><span>بنویسید</span>
+    </button>
+  </nav>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-mic" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM19 11a7 7 0 0 1-14 0M12 18v3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="m20 20-4.2-4.2M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z"/></symbol>
+    <symbol id="i-car" viewBox="0 0 32 32"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M5 19v-3.5l2.6-5.6A2.5 2.5 0 0 1 9.9 8.5h12.2a2.5 2.5 0 0 1 2.3 1.4l2.6 5.6V19a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 19ZM5.5 15.5h21"/><circle cx="10" cy="20.5" r="2.5" fill="currentColor"/><circle cx="22" cy="20.5" r="2.5" fill="currentColor"/></symbol>
+    <symbol id="i-speak" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 9.5v5h3.5L12 19V5L7.5 9.5H4ZM16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
+    <symbol id="i-out" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></symbol>
+  </svg>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

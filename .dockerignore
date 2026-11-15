@@ -1,0 +1,9 @@
+.git
+.github
+node_modules
+whisper
+screenshots
+*.log
+.env
+test/**
+!test/fixtures/market.json

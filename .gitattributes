@@ -1,0 +1,2 @@
+vendor/whisper.cpp/linux-x64/*.so* binary
+vendor/whisper.cpp/linux-x64/whisper-cli binary
