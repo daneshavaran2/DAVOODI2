@@ -342,22 +342,33 @@ function newSearch() {
 }
 $('#dockNew').addEventListener('click', newSearch);
 
+const SEARCH_TIMEOUT_MS = 75_000;
+
 async function search(q) {
   controller?.abort();
-  controller = new AbortController();
+  const ctrl = (controller = new AbortController());
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, SEARCH_TIMEOUT_MS);
   const params = new URLSearchParams({ q });
   history.replaceState(null, '', `?q=${encodeURIComponent(q)}`);
   renderLoading();
   try {
-    const res = await fetch(`/api/price?${params}`, { signal: controller.signal });
-    const data = await res.json().catch(() => ({}));
+    const res = await fetch(`/api/price?${params}`, { signal: ctrl.signal });
+    const data = await res.json().catch(() => null);
+    if (!data) throw new Error(`پاسخ سرور خوانده نشد (${res.status}). چند لحظه بعد دوباره امتحان کنید.`);
     if (!res.ok) throw new Error(data.error || `خطای سرور (${res.status})`);
     render(data);
     updateDock();
   } catch (err) {
-    if (err.name === 'AbortError') return;
+    if (err.name === 'AbortError' && !timedOut) return; // جستجوی تازه‌تری شروع شده
     results.setAttribute('aria-busy', 'false');
-    results.innerHTML = `<div class="card error-box">${esc(err.message || 'ارتباط با سرور برقرار نشد.')}</div>`;
+    const msg = timedOut ? 'پاسخ سایت‌ها بیش از یک دقیقه طول کشید؛ دوباره امتحان کنید.' : err.message || 'ارتباط با سرور برقرار نشد.';
+    results.innerHTML = `<div class="card error-box">${esc(msg)}</div>`;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

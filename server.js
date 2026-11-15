@@ -7,6 +7,7 @@
 // اجرا: node server.js   (پورت با PORT، حالت نمایشی با DEMO=1)
 
 import http from 'node:http';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize as normPath } from 'node:path';
@@ -124,6 +125,21 @@ function citiesParam(v) {
   return ids.length ? ids : DEFAULT_CITIES;
 }
 
+// کش مرورگر: صفحه، اسکریپت‌ها و استایل هر بار با سرور چک می‌شوند (ETag؛ اگر عوض نشده باشند، پاسخ ۳۰۴ بی‌بدنه)،
+// تا بعد از هر استقرار، صفحهٔ تازه با اسکریپت قدیمیِ کش‌شده اجرا نشود. فونت و آیکون کش طولانی دارند.
+const etagOf = (data) => `"${createHash('sha1').update(data).digest('base64url').slice(0, 22)}"`;
+const cacheFor = (ext) =>
+  ext === '.woff2' ? 'public, max-age=31536000, immutable' : ['.png', '.svg', '.ico'].includes(ext) ? 'public, max-age=86400' : 'no-cache';
+
+/** در index.html نشانی اسکریپت و استایل نسخه‌دار می‌شود (‎/app.js?v=…‎) تا کش قدیمی دور زده شود */
+async function versionAssets(html) {
+  const names = ['app.js', 'style.css'];
+  const versions = await Promise.all(
+    names.map((n) => readFile(join(PUBLIC, n)).then((d) => etagOf(d).slice(1, 11), () => null)),
+  );
+  return names.reduce((h, n, i) => (versions[i] ? h.replaceAll(`"/${n}"`, `"/${n}?v=${versions[i]}"`) : h), html);
+}
+
 async function serveStatic(req, res, pathname) {
   let rel;
   try {
@@ -133,24 +149,30 @@ async function serveStatic(req, res, pathname) {
   }
   const file = normPath(join(PUBLIC, rel));
   if (!file.startsWith(PUBLIC)) return send(res, 403, 'Forbidden');
+  let data;
   try {
-    const data = await readFile(file);
-    const ext = extname(file);
-    send(res, 200, data, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Cache-Control': ext === '.html' ? 'no-cache' : ext === '.woff2' ? 'public, max-age=31536000, immutable' : 'public, max-age=300',
-    });
+    data = await readFile(file);
   } catch {
-    send(res, 404, 'Not found');
+    return send(res, 404, 'Not found');
   }
+  const ext = extname(file);
+  if (rel === 'index.html') data = Buffer.from(await versionAssets(data.toString('utf8')));
+  const etag = etagOf(data);
+  const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cacheFor(ext), ETag: etag };
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, { ...SECURITY_HEADERS, 'Cache-Control': headers['Cache-Control'], ETag: etag });
+    return res.end();
+  }
+  send(res, 200, data, headers);
 }
 
 // برای عیب‌یابی استقرار (مثلاً خطای 502 لیارا): آیا درخواستی به برنامه می‌رسد، از کجا و روی کدام پورت؟
 // فقط ده درخواست اول ثبت می‌شود.
 let requestsLogged = 0;
+let logRequests = false; // فقط وقتی سرور واقعاً اجرا شده (نه در آزمون‌ها)
 
 async function handle(req, res) {
-  if (requestsLogged < 10) {
+  if (logRequests && requestsLogged < 10) {
     requestsLogged++;
     const ip = String(req.socket.remoteAddress || '?').replace(/^::ffff:/, '');
     console.log(`درخواست رسید: ${req.method} ${String(req.url).slice(0, 80)} (پورت ${req.socket.localPort}، از ${ip})`);
@@ -278,6 +300,7 @@ function networkAddresses() {
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
+  logRequests = true;
   instrument(server);
   const addrs = networkAddresses();
   console.log(`نشانی‌های شبکهٔ کانتینر: ${addrs.join('، ') || 'هیچ'}${addrs.some((a) => a.includes(':')) ? '' : ' (بدون IPv6)'}`);

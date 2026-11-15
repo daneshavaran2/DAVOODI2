@@ -72,3 +72,36 @@ test('پورت سرویس سکو از متغیرهای محیطی Kubernetes خ�
   assert.deepEqual(servicePorts(env), ['GHEYMAT_KHODRO_SERVICE_PORT=80', 'GHEYMAT_KHODRO_SERVICE_PORT_HTTP=3000']);
   assert.deepEqual(servicePorts({}), []);
 });
+
+// درخواست GET با سرآیند دلخواه ← { status, headers, body }
+function getRaw(port, path, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({ host: '127.0.0.1', port, path, method: 'GET', headers }, (res) => {
+      let body = '';
+      res.on('data', (c) => (body += c));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('کش: صفحه اسکریپت و استایل نسخه‌دار دارد؛ هر بار با سرور چک می‌شوند (ETag و ۳۰۴)', async (t) => {
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const { port } = server.address();
+  const page = await getRaw(port, '/');
+  const m = page.body.match(/src="\/app\.js\?v=([\w-]+)"/);
+  assert.ok(m, 'نشانی app.js نسخه دارد');
+  assert.match(page.body, /href="\/style\.css\?v=[\w-]+"/);
+  assert.equal(page.headers['cache-control'], 'no-cache');
+
+  const js = await getRaw(port, `/app.js?v=${m[1]}`);
+  assert.equal(js.status, 200);
+  assert.equal(js.headers['cache-control'], 'no-cache');
+  assert.ok(js.headers.etag);
+  const again = await getRaw(port, '/app.js', { 'If-None-Match': js.headers.etag });
+  assert.equal(again.status, 304);
+  assert.equal(again.body, '');
+  assert.equal((await getRaw(port, '/fonts/Vazirmatn-Variable.woff2')).headers['cache-control'], 'public, max-age=31536000, immutable');
+});
