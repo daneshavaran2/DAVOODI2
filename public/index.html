@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>قیمت‌یاب خودرو</title>
   <meta name="description" content="نام و مدل خودرو را بگویید؛ قیمت حدودی امروز را از باما، دیوار و همراه مکانیک ببینید.">
-  <meta name="theme-color" content="#f5f3ee" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#14181b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#0e1b2c">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="preload" href="/fonts/Vazirmatn-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/NotoNaskhArabic-Variable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -16,35 +16,45 @@
     حالت نمایشی: قیمت‌ها نمونه و غیرواقعی‌اند. خودروهای نمونه: پژو ۲۰۶، پژو ۲۰۶ صندوقدار، پژو پارس، سمند سورن، شاهین، کیا سراتو، پراید ۱۳۱ و ۱۱۱.
   </div>
 
-  <main class="wrap">
-    <header class="top">
-      <div class="brand">
+  <header class="cockpit">
+    <div class="bar">
+      <a class="brand" href="/">
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-car"/></svg>
-        <div>
-          <h1>قیمت‌یاب خودرو</h1>
-          <p class="tagline">بگویید چه ماشینی و چه مدلی؛ قیمت حدودی امروز را از چند سایت می‌آوریم.</p>
-        </div>
-      </div>
-    </header>
+        <span class="brand-name">قیمت‌یاب خودرو</span>
+      </a>
+      <p class="bar-note">قیمت روز از باما، دیوار و همراه مکانیک</p>
+    </div>
 
-    <section class="ask" aria-label="پرسش">
+    <section class="ask" aria-labelledby="askTitle">
+      <h1 id="askTitle">نام خودرو را بگویید، قیمت امروزش را ببینید</h1>
+
       <button class="mic" id="micBtn" type="button" aria-pressed="false" aria-describedby="micStatus">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-mic"/></svg>
-        <span class="mic-label" id="micLabel">بگویید</span>
+        <span class="mic-face">
+          <span class="mic-lamp" aria-hidden="true"></span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-mic"/></svg>
+          <span class="mic-label" id="micLabel">بگویید</span>
+        </span>
       </button>
-      <p class="mic-status" id="micStatus" aria-live="polite">روی میکروفون بزنید و بگویید؛ مثلاً «پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰»</p>
+      <p class="mic-status" id="micStatus" aria-live="polite">دکمه را بزنید و بگویید؛ مثلاً <span class="nw">«پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰»</span></p>
 
-      <form class="query" id="queryForm" autocomplete="off">
+      <form class="query" id="queryForm" role="search" autocomplete="off">
         <label class="visually-hidden" for="q">نام و مدل خودرو</label>
         <input id="q" name="q" type="search" inputmode="text" enterkeyhint="search"
-               placeholder="یا تایپ کنید: پراید ۱۳۱ مدل ۹۸" maxlength="200">
+               placeholder="یا بنویسید: پراید ۱۳۱ مدل ۹۸" maxlength="200" spellcheck="false">
         <button class="go" type="submit">
           <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-search"/></svg>
           <span>جستجو</span>
         </button>
       </form>
 
-      <div class="options">
+      <div class="ask-foot">
+        <div class="examples" id="examples" aria-label="نمونه‌ها">
+          <span class="examples-label">مثلاً</span>
+          <button type="button" class="chip">پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰</button>
+          <button type="button" class="chip">پراید ۱۳۱ مدل ۹۸</button>
+          <button type="button" class="chip">دنا پلاس توربو صفر</button>
+          <button type="button" class="chip">تویوتا کمری ۲۰۱۸</button>
+        </div>
         <label class="city">
           <span>آگهی‌های دیوار از</span>
           <select id="city">
@@ -52,29 +62,25 @@
           </select>
         </label>
       </div>
-
-      <div class="examples" id="examples" aria-label="نمونه‌ها">
-        <button type="button" class="chip">پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰</button>
-        <button type="button" class="chip">پراید ۱۳۱ مدل ۹۸</button>
-        <button type="button" class="chip">دنا پلاس توربو صفر</button>
-        <button type="button" class="chip">تویوتا کمری ۲۰۱۸</button>
-      </div>
     </section>
+  </header>
 
+  <main class="page">
     <section class="results" id="results" aria-live="polite" aria-busy="false"></section>
-
-    <footer class="foot">
-      <p>منابع: <a href="https://bama.ir" target="_blank" rel="noopener">باما</a>، <a href="https://divar.ir" target="_blank" rel="noopener">دیوار</a>، <a href="https://www.hamrah-mechanic.com" target="_blank" rel="noopener">همراه مکانیک</a>.
-      قیمت‌ها تقریبی‌اند؛ قیمت آگهی‌ها پیشنهادی فروشنده است، نه قیمت نهایی معامله.</p>
-    </footer>
   </main>
 
+  <footer class="foot">
+    <p>منابع: <a href="https://bama.ir" target="_blank" rel="noopener">باما</a>، <a href="https://divar.ir" target="_blank" rel="noopener">دیوار</a> و <a href="https://www.hamrah-mechanic.com" target="_blank" rel="noopener">همراه مکانیک</a>.
+    قیمت‌ها تقریبی‌اند؛ قیمت آگهی‌ها پیشنهاد فروشنده است، نه قیمت نهایی معامله.</p>
+  </footer>
+
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <symbol id="i-mic" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM19 11a7 7 0 0 1-14 0M12 18v3"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM19 11a7 7 0 0 1-14 0M12 18v3"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="m20 20-4.2-4.2M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z"/></symbol>
-    <symbol id="i-car" viewBox="0 0 32 32"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M5 19v-3.5l2.6-5.6A2.5 2.5 0 0 1 9.9 8.5h12.2a2.5 2.5 0 0 1 2.3 1.4l2.6 5.6V19a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 19ZM5.5 15.5h21"/><circle cx="10" cy="20.5" r="2.5" fill="currentColor"/><circle cx="22" cy="20.5" r="2.5" fill="currentColor"/></symbol>
+    <symbol id="i-car" viewBox="0 0 32 32"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M5 19v-3.5l2.6-5.6A2.5 2.5 0 0 1 9.9 8.5h12.2a2.5 2.5 0 0 1 2.3 1.4l2.6 5.6V19a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 19ZM5.5 15.5h21"/><circle cx="10" cy="20.5" r="2.5" fill="currentColor"/><circle cx="22" cy="20.5" r="2.5" fill="currentColor"/></symbol>
     <symbol id="i-speak" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 9.5v5h3.5L12 19V5L7.5 9.5H4ZM16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
     <symbol id="i-out" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></symbol>
   </svg>
 
   <script type="module" src="/app.js"></script>

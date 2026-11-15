@@ -24,17 +24,23 @@ function toman(n) {
   if (m >= 1000) {
     const b = Math.floor(m / 1000);
     const r = m % 1000;
-    return `${fa(b)} میلیارد${r ? ` و ${fa(r)} میلیون` : ''} تومان`;
+    return `${fa(b)}\u00a0میلیارد${r ? ` و ${fa(r)}\u00a0میلیون` : ''} تومان`;
   }
-  if (m >= 1) return `${fa(m)} میلیون تومان`;
+  if (m >= 1) return `${fa(m)}\u00a0میلیون تومان`;
   return `${nf.format(n)} تومان`;
+}
+
+/** برای قیمت بزرگ: عدد و واحد «تومان» جدا، تا واحد کوچک‌تر نوشته شود */
+function tomanParts(n) {
+  const full = toman(n);
+  return full.endsWith(' تومان') ? { value: full.slice(0, -' تومان'.length), unit: 'تومان' } : { value: full, unit: '' };
 }
 
 /** کوتاه: «۱٫۸۱ میلیارد» یا «۷۴۰ میلیون» */
 function short(n) {
   if (!(n > 0)) return '—';
-  if (n >= 1e9) return `${fa((n / 1e9).toFixed(2).replace(/\.?0+$/, '')).replace('.', '٫')} میلیارد`;
-  return `${fa(Math.round(n / 1e6))} میلیون`;
+  if (n >= 1e9) return `${fa((n / 1e9).toFixed(2).replace(/\.?0+$/, '')).replace('.', '٫')}\u00a0میلیارد`;
+  return `${fa(Math.round(n / 1e6))}\u00a0میلیون`;
 }
 
 const km = (v) => (v === 0 ? 'صفر کیلومتر' : Number.isFinite(v) ? `${nf.format(v)} کیلومتر` : '');
@@ -91,14 +97,14 @@ function setListening(on) {
   listening = on;
   micBtn.classList.toggle('listening', on);
   micBtn.setAttribute('aria-pressed', String(on));
-  micLabel.textContent = on ? 'گوش می‌دهم…' : 'بگویید';
+  micLabel.textContent = on ? 'می‌شنوم' : 'بگویید';
   if (!on) micBtn.style.setProperty('--level', '0');
 }
 
 function setBusy(on) {
   busy = on;
   micBtn.classList.toggle('busy', on);
-  micLabel.textContent = on ? 'صبر کنید…' : 'بگویید';
+  micLabel.textContent = on ? 'صبر کنید' : 'بگویید';
 }
 
 function disableMic(text, isError = false) {
@@ -310,40 +316,99 @@ function renderLoading() {
   results.setAttribute('aria-busy', 'true');
   results.innerHTML = `
     <div class="loading">
-      <p>در حال جستجو در باما، دیوار و همراه مکانیک…</p>
+      <p>در حال گرفتن قیمت از باما، دیوار و همراه مکانیک…</p>
       <div class="skeleton"></div>
       <div class="skeleton short"></div>
       <div class="skeleton short"></div>
     </div>`;
+  bringIntoView();
+}
+
+/** اگر بخش نتیجه پایین‌تر از صفحهٔ فعلی است، آرام به آن برو */
+function bringIntoView() {
+  const top = results.getBoundingClientRect().top;
+  if (top < window.innerHeight * 0.6) return;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  results.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
 }
 
 // ---------------------------------------------------------------- نمایش نتیجه
 
-function sourceChips(group) {
-  return `<div class="src-chips">${group.sources
-    .map(
-      (s) =>
-        `<span class="src-chip">${esc(s.name)}: <b>${short(s.median)}</b> <span class="muted">(${fa(s.count)} ${esc(s.basis)})</span></span>`,
-    )
-    .join('')}</div>`;
+/** «باما ۱٫۸۱ میلیارد (۵ آگهی)، دیوار …» در یک خط */
+function sourceLine(group) {
+  return group.sources.map((s) => `${esc(s.name)} ${short(s.median)} (${fa(s.count)} ${esc(s.basis)})`).join('، ');
 }
 
-function heroCard(data) {
-  const s = data.summary;
-  const range =
-    s.low && s.high && s.low !== s.high ? `<p class="hero-range">بازهٔ تقریبی: ${short(s.low)} تا ${short(s.high)} تومان</p>` : '';
-  const speakBtn = faVoice
-    ? `<button type="button" class="speak" data-say="${esc(`قیمت حدودی ${toman(s.estimate)}`)}"><svg aria-hidden="true"><use href="#i-speak"/></svg>بخوان</button>`
+/** درجهٔ بازهٔ قیمت: کمترین تا بیشترین، عقربه روی قیمت حدودی */
+function gauge(s) {
+  if (!(s.low > 0 && s.high > s.low)) return '';
+  const pos = Math.min(0.98, Math.max(0.02, (s.estimate - s.low) / (s.high - s.low)));
+  const ticks = Array.from({ length: 21 }, (_, i) => {
+    const x = i * 5;
+    const major = i % 5 === 0;
+    return `<line x1="${x}" x2="${x}" y1="${major ? 18 : 27}" y2="39" stroke="currentColor" stroke-width="${major ? 1.5 : 1}" vector-effect="non-scaling-stroke"/>`;
+  }).join('');
+  return `
+    <figure class="gauge" role="img" aria-label="بازهٔ قیمت از ${esc(short(s.low))} تا ${esc(short(s.high))} تومان">
+      <div class="gauge-scale" style="--pos:${pos.toFixed(3)}">
+        <svg class="gauge-ticks" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">${ticks}<line x1="0" x2="100" y1="39.5" y2="39.5" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>
+        <span class="gauge-fill"></span>
+        <span class="gauge-run"><span class="gauge-needle"></span></span>
+      </div>
+      <figcaption class="gauge-ends" aria-hidden="true">
+        <span>کمترین<b>${short(s.low)}</b></span>
+        <span>بیشترین<b>${short(s.high)}</b></span>
+      </figcaption>
+    </figure>`;
+}
+
+function verdictHead(data) {
+  const q = data.query;
+  const name =
+    data.canonical?.title ||
+    data.sources.find((s) => s.id === 'bama' && s.matched)?.matched.title ||
+    data.sources.find((s) => s.matched)?.matched.title ||
+    q.carText;
+  const asked = [q.year ? `مدل ${fa(q.year.value)}` : '', q.condition === 'new' ? 'صفر کیلومتر' : q.condition === 'used' ? 'کارکرده' : '']
+    .filter(Boolean)
+    .join('، ');
+  const meta = asked || (data.summary?.label ? fa(data.summary.label) : '');
+  const unclear = q.yearUnclear
+    ? '<p class="note">سال ساخت را متوجه نشدم؛ قیمت سال‌های مختلف پایین‌تر آمده است. می‌توانید دوباره بگویید یا سال را بنویسید.</p>'
     : '';
   return `
-    <div class="card hero">
-      <p class="hero-label">قیمت حدودی — ${esc(fa(s.label))}</p>
-      <p class="hero-price">${toman(s.estimate)}</p>
-      <p class="hero-exact">${nf.format(s.estimate)} تومان</p>
-      ${range}
-      ${sourceChips(s)}
-      ${speakBtn ? `<div class="hero-actions">${speakBtn}</div>` : ''}
-    </div>`;
+    <header class="verdict-head">
+      <h2 class="car">${esc(fa(name))}</h2>
+      ${meta ? `<p class="car-meta">${esc(meta)}</p>` : ''}
+      ${unclear}
+    </header>`;
+}
+
+function verdictCard(data) {
+  const s = data.summary;
+  const { value } = tomanParts(s.estimate);
+  const rows = s.sources
+    .map(
+      (src) =>
+        `<div><dt>${esc(src.name)}</dt><dd class="v">${short(src.median)}</dd><dd class="c">${fa(src.count)}\u00a0${esc(src.basis)}</dd></div>`,
+    )
+    .join('');
+  const speakBtn = faVoice
+    ? `<div class="verdict-actions"><button type="button" class="speak" data-say="${esc(`قیمت حدودی ${toman(s.estimate)}`)}"><svg aria-hidden="true"><use href="#i-speak"/></svg>قیمت را بلند بخوان</button></div>`
+    : '';
+  return `
+    <article class="verdict">
+      ${verdictHead(data)}
+      <p class="verdict-label">قیمت حدودی امروز، به تومان</p>
+      <p class="verdict-price">${value}</p>
+      <p class="verdict-exact">${nf.format(s.estimate)} تومان</p>
+      ${gauge(s)}
+      <section class="by-source" aria-label="قیمت در هر منبع">
+        <h3>قیمت در هر منبع</h3>
+        <dl>${rows}</dl>
+      </section>
+      ${speakBtn}
+    </article>`;
 }
 
 function newCarCard(data) {
@@ -352,7 +417,7 @@ function newCarCard(data) {
   return `
     <div class="card">
       <div class="mini"><h2>صفر کیلومتر</h2><span class="val">${toman(n.estimate)}</span></div>
-      ${sourceChips(n)}
+      <p class="mini-src">${sourceLine(n)}</p>
     </div>`;
 }
 
@@ -364,8 +429,8 @@ function factoryCard(data) {
     .join('');
   return `
     <div class="card">
-      <h2>قیمت کارخانه (برای ثبت‌نام/قرعه‌کشی)</h2>
-      <p class="sub">این قیمت مصوب است و معمولاً از قیمت بازار کمتر است؛ در برآورد بالا حساب نشده.</p>
+      <h2>قیمت کارخانه</h2>
+      <p class="sub">قیمت مصوب برای ثبت‌نام و قرعه‌کشی؛ معمولاً کمتر از قیمت بازار است و در برآورد بالا حساب نشده.</p>
       <table><thead><tr><th>تیپ</th><th>سال</th><th>قیمت</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
 }
@@ -379,13 +444,14 @@ function yearsCard(data) {
       <tr class="${y.key === target ? 'is-target' : ''}">
         <td>${fa(y.key)}</td>
         <td class="num">${short(y.estimate)}</td>
-        <td class="muted">${y.sources.map((s) => esc(s.name)).join('، ')} — ${fa(y.count)} قیمت</td>
+        <td class="muted">${y.sources.map((s) => esc(s.name)).join('، ')}، ${fa(y.count)} قیمت</td>
       </tr>`,
     )
     .join('');
   return `
     <div class="card">
       <h2>کارکرده، به تفکیک سال ساخت</h2>
+      ${data.byYear.some((y) => y.key === target) ? '<p class="sub">سطر رنگی، سالی است که پرسیدید.</p>' : ''}
       <table><thead><tr><th>مدل</th><th>قیمت حدودی (تومان)</th><th>منبع</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
 }
@@ -414,7 +480,7 @@ function sourceCard(s) {
   const meta = !s.ok
     ? 'در دسترس نبود'
     : s.matched
-      ? `${esc(fa(s.matched.title))} — ${fa(priced)} قیمت`
+      ? `${esc(fa(s.matched.title))}، ${fa(priced)} قیمت`
       : 'پیدا نشد';
   const notes = [
     ...(!s.ok ? [`<p class="note bad">${esc(s.error)}</p>`] : []),
@@ -422,14 +488,14 @@ function sourceCard(s) {
   ].join('');
   const lists = (s.items || []).filter((i) => i.kind === 'list');
   const ads = (s.items || []).filter((i) => i.kind !== 'list');
-  const section = (title, arr) => (arr.length ? `<h2>${title}</h2><ul class="rows">${arr.map(itemRow).join('')}</ul>` : '');
+  const section = (title, arr) => (arr.length ? `<h3>${title}</h3><ul class="rows">${arr.map(itemRow).join('')}</ul>` : '');
   const link = s.link
     ? `<p><a class="ext" href="${esc(s.link)}" target="_blank" rel="noopener">مشاهده در ${esc(s.name)}<svg aria-hidden="true"><use href="#i-out"/></svg></a></p>`
     : '';
   const adsTitle = s.totalAds > ads.length ? `آگهی‌ها (${fa(ads.length)} از ${fa(s.totalAds)})` : 'آگهی‌ها';
   return `
     <details class="card source">
-      <summary><span class="dot ${state}"></span><span class="src-name">${esc(s.name)}</span><span class="src-meta">${meta}</span></summary>
+      <summary><span class="dot ${state}"></span><span class="src-name">${esc(s.name)}</span><span class="src-meta">${meta}</span><svg class="chev" aria-hidden="true"><use href="#i-chev"/></svg></summary>
       <div class="source-body">
         ${notes}
         ${section('فهرست قیمت', lists)}
@@ -447,30 +513,24 @@ function render(data) {
     return;
   }
   const q = data.query;
-  const matchedName =
-    data.canonical?.title ||
-    data.sources.find((s) => s.id === 'bama' && s.matched)?.matched.title ||
-    data.sources.find((s) => s.matched)?.matched.title ||
-    q.carText;
   const yearTxt = q.year ? `، مدل ${fa(q.year.value)}` : '';
-  const condTxt = q.condition === 'new' ? '، صفر' : q.condition === 'used' ? '، کارکرده' : '';
-  const unclear = q.yearUnclear
-    ? '<p class="matched note">سال ساخت را متوجه نشدم؛ قیمت سال‌های مختلف پایین آمده است. می‌توانید دوباره بگویید یا سال را تایپ کنید.</p>'
-    : '';
-  const head = `<p class="matched">نتیجه برای <strong>${esc(fa(matchedName))}</strong>${yearTxt}${condTxt}</p>${unclear}`;
-
   const allFailed = data.sources.every((s) => !s.ok);
   let main;
   if (data.summary) {
-    main = heroCard(data) + newCarCard(data);
-  } else if (allFailed) {
-    main = `<div class="card error-box">هیچ‌کدام از سایت‌ها در دسترس نبود. اگر سرور خارج از ایران است، این سایت‌ها درخواستش را رد می‌کنند. جزئیات خطا پایین صفحه است.</div>`;
+    main = verdictCard(data) + newCarCard(data);
   } else {
-    main = `<div class="card empty">برای «${esc(fa(q.carText))}»${esc(yearTxt)} قیمتی پیدا نشد. نام را دقیق‌تر بگویید (مثلاً با تیپ) یا سال دیگری را امتحان کنید.</div>`;
+    const msg = allFailed
+      ? 'هیچ‌کدام از سایت‌ها در دسترس نبود. اگر سرور خارج از ایران است، این سایت‌ها درخواستش را رد می‌کنند. جزئیات خطا پایین صفحه است.'
+      : `برای «${esc(fa(q.carText))}»${esc(yearTxt)} قیمتی پیدا نشد. نام را کامل‌تر بگویید (مثلاً با تیپ) یا سال دیگری را امتحان کنید.`;
+    // دیوار همیشه با خود متن پرسش جستجو می‌کند؛ «شناخته شدن» یعنی باما یا همراه مکانیک خودرو را پیدا کرده باشند
+    const known = data.canonical?.title || data.sources.some((s) => s.id !== 'divar' && s.matched);
+    const head = known
+      ? verdictHead(data)
+      : `<header class="verdict-head"><h2 class="car">${allFailed ? 'سایت‌ها در دسترس نبودند' : 'این خودرو را پیدا نکردم'}</h2></header>`;
+    main = `<article class="verdict verdict-empty">${head}<p class="msg${allFailed ? ' error-box' : ''}">${msg}</p></article>`;
   }
 
-  results.innerHTML =
-    head + main + hintsCard(data) + yearsCard(data) + factoryCard(data) + data.sources.map(sourceCard).join('');
+  results.innerHTML = main + hintsCard(data) + yearsCard(data) + factoryCard(data) + data.sources.map(sourceCard).join('');
   results.querySelector('.speak')?.addEventListener('click', (e) => speak(e.currentTarget.dataset.say));
   results.querySelectorAll('.hint-chip').forEach((b) =>
     b.addEventListener('click', () => {

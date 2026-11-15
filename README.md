@@ -270,7 +270,9 @@ liara.json             تنظیمات استقرار روی لیارا
 test/                  آزمون‌ها و داده‌های نمونه
 ```
 
-فونت [وزیرمتن](https://github.com/rastikerdar/vazirmatn) داخل پروژه است (مجوز OFL در `public/fonts/OFL.txt`) تا به Google Fonts وابسته نباشد.
+فونت‌های [وزیرمتن](https://github.com/rastikerdar/vazirmatn) (متن و دکمه‌ها) و [Noto Naskh Arabic](https://github.com/notofonts/arabic) (عنوان‌ها و قیمت) داخل پروژه‌اند (مجوز OFL در `public/fonts/OFL.txt` و `public/fonts/OFL-NotoNaskhArabic.txt`) تا به Google Fonts وابسته نباشند.
+
+طراحی برای مخاطب اصلی (آقایان ۵۰ تا ۶۰ ساله) است: متن پایه ۱۸ پیکسل، تضاد رنگ بالا، دکمه‌های بزرگ و نوشته‌دار، و حرکت کم (با «کاهش حرکت» سیستم‌عامل، انیمیشن‌ها خاموش می‌شوند). بازهٔ قیمت با یک درجه نشان داده می‌شود: کمترین در راست، بیشترین در چپ، و عقربه روی قیمت حدودی.
 
 ## مجوز
 
