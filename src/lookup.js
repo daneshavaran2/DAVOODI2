@@ -9,10 +9,11 @@ import * as khodro45 from './sources/khodro45.js';
 import * as iranjib from './sources/iranjib.js';
 import * as carir from './sources/carir.js';
 import * as khodrobank from './sources/khodrobank.js';
+import * as other from './sources/baravard.js';
 
 // DISABLED_SOURCES=khodro45,carir: خاموش کردن یک یا چند منبع
 const disabled = new Set(String(process.env.DISABLED_SOURCES || '').split(',').map((s) => s.trim()).filter(Boolean));
-export const SOURCES = [bama, divar, hamrah, khodro45, iranjib, carir, khodrobank].filter((s) => !disabled.has(s.info.id));
+export const SOURCES = [bama, divar, hamrah, khodro45, iranjib, carir, khodrobank, other].filter((s) => !disabled.has(s.info.id));
 const SOURCE_TIMEOUT = 40_000;
 const MAX_ITEMS = 40;
 

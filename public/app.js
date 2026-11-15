@@ -222,7 +222,7 @@ function startBrowserVoice() {
 
   rec.onstart = () => {
     setListening(true);
-    setStatus('بگویید… مثلاً «پراید ۱۳۱ مدل ۹۸»');
+    setStatus('بگویید… نام، تیپ و سال خودرو را.');
   };
   rec.onresult = (e) => {
     let interim = '';
@@ -301,7 +301,6 @@ function chipSearch(e) {
   input.value = chip.dataset.q || chip.textContent.trim();
   search(input.value);
 }
-$('#examples').addEventListener('click', chipSearch);
 
 // ---------------------------------------------------------------- جستجوهای اخیر (فقط در همین مرورگر)
 
@@ -391,7 +390,7 @@ function renderLoading() {
   results.setAttribute('aria-busy', 'true');
   results.innerHTML = `
     <div class="loading">
-      <p>در حال گرفتن قیمت از هفت سایت؛ چند ثانیه صبر کنید…</p>
+      <p>در حال گرفتن قیمت از سایت‌های خودرو؛ چند ثانیه صبر کنید…</p>
       <div class="skeleton"></div>
       <div class="skeleton short"></div>
       <div class="skeleton short"></div>

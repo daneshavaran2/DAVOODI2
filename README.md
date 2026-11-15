@@ -111,7 +111,7 @@
 - **بدون تشخیص گفتار سرور:** متغیر محیطی `WHISPER_MODEL_NAME=none` را بگذارید.
 - **محدودیت Docker Hub:** اگر ساخت با خطای 429 از Docker Hub متوقف شد، در `Dockerfile` مقدار `BASE_REGISTRY` را `mirror.gcr.io/library/` بگذارید.
 - **محل ساخت:** ساخت روی سرور آلمانِ لیارا است (`build.location` در `liara.json`). اگر پلن شما این را اجازه نمی‌دهد، آن خط را بردارید؛ ساخت دیگر چیزی از اینترنت دانلود نمی‌کند.
-- **حالت نمایشی روی لیارا:** متغیر محیطی `DEMO=1` را در پنل لیارا تعریف کنید.
+- **حالت نمایشی:** فقط برای آزمایش بدون اینترنت ایران است (قیمت‌ها ساختگی‌اند و بالای صفحه «حالت نمایشی» نوشته می‌شود). روی سرور واقعی متغیر `DEMO` را **تعریف نکنید**؛ اگر در پنل لیارا `DEMO=1` گذاشته‌اید، پاکش کنید تا قیمت‌های واقعی نشان داده شود.
 
 ## اجرا
 
@@ -224,7 +224,7 @@ sudo systemctl enable --now gheymat
 | `HOST` | همهٔ نشانی‌ها (IPv4 و IPv6) | نشانی گوش‌دادن، مثلاً `127.0.0.1` فقط برای دسترسی محلی |
 | `DEMO` | — | `1` = حالت نمایشی با داده‌های نمونه |
 | `RATE_LIMIT` | `20` | حداکثر جستجو در دقیقه برای هر IP |
-| `DISABLED_SOURCES` | — | خاموش کردن منبع‌ها، مثلاً `khodro45,carir` (شناسه‌ها: bama، divar، hamrah، khodro45، iranjib، carir، khodrobank) |
+| `DISABLED_SOURCES` | — | خاموش کردن منبع‌ها، مثلاً `khodro45,carir` (شناسه‌ها: bama، divar، hamrah، khodro45، iranjib، carir، khodrobank، other) |
 | `IRANJIB_URLS`، `CARIR_URLS`، `KHODROBANK_URLS` | — | نشانی صفحه‌های قیمت این سایت‌ها (جداشده با کاما)، اگر نشانی پیش‌فرض عوض شده باشد |
 | `TRUST_PROXY` | — | `1` = خواندن IP کاربر از `X-Forwarded-For` (پشت nginx/Caddy) |
 | `WHISPER_MODEL` | بزرگ‌ترین مدل در `whisper/models/` | مسیر فایل مدل |
@@ -265,6 +265,7 @@ src/sources/divar.js   دیوار
 src/sources/hamrah.js  همراه مکانیک
 src/sources/khodro45.js خودرو۴۵
 src/sources/iranjib.js، carir.js، khodrobank.js  جدول‌های قیمت روز (با pricelist.js و pricetable.js)
+src/sources/baravard.js برآورد قیمت کارکرده برای هر تیپ و سال؛ در صفحه با نام «منبع دیگر» و بدون پیوند
 src/aggregate.js       آمار، حذف داده‌های پرت و برآورد نهایی
 src/lookup.js          اجرای هم‌زمان همهٔ منبع‌ها
 src/stt.js             تشخیص گفتار روی سرور (whisper.cpp)، صف و پاک‌سازی متن

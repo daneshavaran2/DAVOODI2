@@ -33,7 +33,7 @@ export function stats(values) {
   };
 }
 
-const KIND_LABEL = { ad: 'آگهی', market: 'قیمت بازار', dealer: 'قیمت نمایندگی' };
+const KIND_LABEL = { ad: 'آگهی', market: 'قیمت بازار', dealer: 'قیمت نمایندگی', estimate: 'برآورد قیمت' };
 
 /** ترکیب آمار سایت‌های مختلف برای یک گروه (صفر یا یک سال). */
 export function combine(perSource) {

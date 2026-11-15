@@ -341,6 +341,40 @@ function khodro45(url) {
   return respond({ count: hits.length, next: null, previous: null, results: hits.slice(offset, offset + limit) });
 }
 
+// منبع دیگر (baravard.com): پیوند تیپ‌ها در صفحهٔ pricing، و صفحهٔ هر تیپ با بازهٔ قیمت در ld+json
+function baravardTrims() {
+  const out = [];
+  let id = 300;
+  for (const car of market.cars) {
+    const keys = [...new Set(car.prices.map((p) => p.trim || ''))];
+    for (const k of keys) {
+      id++;
+      const name = k ? car.trims[k].title : car.title;
+      out.push({ id: String(id), name, slug: encodeURIComponent(name.replace(/ /g, '-')), car, trim: k });
+    }
+  }
+  return out;
+}
+
+function baravard(url) {
+  const trims = baravardTrims();
+  if (url.pathname === '/' || url.pathname === '/pricing') {
+    const links = url.pathname === '/pricing' ? trims.map((t) => `<li><a href="/pricing/${t.id}/${t.slug}">${toFaDigits(t.name)}</a></li>`).join('') : '';
+    return html(`<nav><a href="/pricing">قیمت خودرو</a></nav><ul>${links}</ul>`, 'برآورد');
+  }
+  const m = url.pathname.match(/^\/pricing\/(\d+)\//);
+  const t = m && trims.find((x) => x.id === m[1]);
+  if (!t) return html('<p>پیدا نشد</p>');
+  const year = Number(url.searchParams.get('model'));
+  const p = t.car.prices.find((x) => (x.trim || '') === t.trim && x.year === year && !x.new);
+  const base = p && (p.hamrah || (p.bama || [])[0]);
+  if (!base) return html(`<h1>${t.name}</h1><p>برای این سال قیمتی ثبت نشده است.</p>`);
+  const ld = { '@context': 'https://schema.org', '@type': 'Product', name: t.name, offers: { '@type': 'AggregateOffer', lowPrice: base - 40e6, highPrice: base + 40e6, priceCurrency: 'IRT' } };
+  return html(
+    `<script type="application/ld+json">${JSON.stringify(ld)}</script><h1>قیمت ${toFaDigits(t.name)} مدل ${toFaDigits(year)}</h1><p>قیمت تخمینی: ${toFaDigits(sep(base - 40e6))} تا ${toFaDigits(sep(base + 40e6))} تومان</p>`,
+  );
+}
+
 /** نام کامل خودروها و برآوردهای درست بازار نمونه، برای آزمون‌ها. */
 export function demoMarket() {
   return market;
@@ -348,7 +382,7 @@ export function demoMarket() {
 
 /**
  * fetch جعلی که درخواست‌های سایت‌ها را از بازار نمونه جواب می‌دهد.
- * extra: ایران‌جیب، car.ir، خودروبانک و خودرو۴۵ هم (بدون آن، فقط سه سایت اصلی و بقیه ۴۰۴).
+ * extra: ایران‌جیب، car.ir، خودروبانک، خودرو۴۵ و منبع دیگر هم (بدون آن، فقط سه سایت اصلی و بقیه ۴۰۴).
  */
 export function createDemoFetch({ delay = 0, fail = [], extra = false } = {}) {
   return async (input, init = {}) => {
@@ -367,6 +401,7 @@ export function createDemoFetch({ delay = 0, fail = [], extra = false } = {}) {
       if (url.host === 'car.ir') return carir(url);
       if (url.host === 'www.khodrobank.com') return khodrobank(url);
       if (url.host === 'khodro45.com') return khodro45(url);
+      if (url.host === 'baravard.com') return baravard(url);
     }
     return respond({}, 404);
   };

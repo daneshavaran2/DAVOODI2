@@ -19,7 +19,7 @@
 </head>
 <body>
   <div class="demo-banner" id="demoBanner" hidden>
-    حالت نمایشی: قیمت‌ها نمونه و غیرواقعی‌اند. خودروهای نمونه: پژو ۲۰۶، پژو ۲۰۶ صندوقدار، پژو پارس، سمند سورن، شاهین، کیا سراتو، پراید ۱۳۱ و ۱۱۱.
+    حالت نمایشی (برای آزمایش): قیمت‌ها نمونه‌اند، نه قیمت واقعی بازار.
   </div>
 
   <header class="cockpit">
@@ -28,7 +28,7 @@
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-car"/></svg>
         <span class="brand-name">قیمت‌یاب خودرو</span>
       </a>
-      <p class="bar-note">قیمت روز از هفت سایت معتبر</p>
+      <p class="bar-note">قیمت روز از سایت‌های معتبر خودرو</p>
     </div>
 
     <section class="ask" aria-labelledby="askTitle">
@@ -41,12 +41,12 @@
           <span class="mic-label" id="micLabel">بگویید</span>
         </span>
       </button>
-      <p class="mic-status" id="micStatus" aria-live="polite">دکمه را بزنید و بگویید؛ مثلاً <span class="nw">«پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰»</span></p>
+      <p class="mic-status" id="micStatus" aria-live="polite">دکمه را بزنید و نام، تیپ و سال خودرو را بگویید.</p>
 
       <form class="query" id="queryForm" role="search" autocomplete="off">
         <label class="visually-hidden" for="q">نام و مدل خودرو</label>
         <input id="q" name="q" type="search" inputmode="text" enterkeyhint="search"
-               placeholder="یا بنویسید: پراید ۱۳۱ مدل ۹۸" maxlength="200" spellcheck="false">
+               placeholder="یا نام و سال خودرو را بنویسید" maxlength="200" spellcheck="false">
         <button class="go" type="submit">
           <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-search"/></svg>
           <span>جستجو</span>
@@ -55,13 +55,6 @@
 
       <div class="ask-foot">
         <div class="examples recent" id="recent" aria-label="جستجوهای اخیر" hidden></div>
-        <div class="examples" id="examples" aria-label="نمونه‌ها">
-          <span class="examples-label">مثلاً</span>
-          <button type="button" class="chip">پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰</button>
-          <button type="button" class="chip">پراید ۱۳۱ مدل ۹۸</button>
-          <button type="button" class="chip">دنا پلاس توربو صفر</button>
-          <button type="button" class="chip">تویوتا کمری ۲۰۱۸</button>
-        </div>
         <label class="city">
           <span>آگهی‌های دیوار از</span>
           <select id="city">

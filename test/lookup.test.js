@@ -62,7 +62,9 @@ test('همهٔ سایت‌ها در دسترس نباشند: خطای روشن،
   useFetch({ fail: ['bama.ir', 'api.divar.ir', 'www.hamrah-mechanic.com'] });
   const r = await lookupAll('پژو 206');
   assert.equal(r.summary, null);
-  assert.ok(r.sources.every((s) => !s.ok && s.error));
+  // هر منبع یا خطا داده یا (مثل منبعی که بدون سال اصلاً درخواستی نمی‌فرستد) قیمتی نداده است
+  for (const s of r.sources) assert.ok((!s.ok && s.error) || !s.items.length, s.id);
+  for (const id of ['bama', 'divar', 'hamrah']) assert.equal(r.sources.find((s) => s.id === id).ok, false);
 });
 
 test('متن بی‌معنی: پیام راهنما', async () => {

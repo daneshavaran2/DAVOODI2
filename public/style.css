@@ -275,7 +275,6 @@ h1 {
   font-size: 1.125rem;
 }
 .mic-status.error { color: #ffb3ab; }
-.nw { white-space: nowrap; }
 
 .query { display: flex; gap: 10px; width: 100%; }
 .query input {
@@ -647,7 +646,6 @@ body.has-dock { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
   }
   .ask-foot .examples::-webkit-scrollbar { display: none; }
   .ask-foot .chip, .ask-foot .examples-label { flex: none; scroll-snap-align: start; }
-  .recent:not([hidden]) + .examples { display: none; }
   .years th:nth-child(3), .years td:nth-child(3) { display: none; }
   .verdict-actions .speak { flex: 1; justify-content: center; }
   .mic { width: 136px; height: 136px; }

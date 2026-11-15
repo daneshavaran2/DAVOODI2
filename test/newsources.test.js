@@ -12,6 +12,7 @@ import { _reset as resetHamrah } from '../src/sources/hamrah.js';
 import * as iranjib from '../src/sources/iranjib.js';
 import * as carir from '../src/sources/carir.js';
 import * as khodrobank from '../src/sources/khodrobank.js';
+import * as other from '../src/sources/baravard.js';
 
 const M = 1e6;
 const B = 1e9;
@@ -21,6 +22,7 @@ function useMarket(opts = {}) {
   iranjib._reset();
   carir._reset();
   khodrobank._reset();
+  other._reset();
   setFetch(createDemoFetch({ extra: true, ...opts }));
 }
 
@@ -154,11 +156,12 @@ test('سایتی که میانه‌اش چند برابر بقیه است (وا�
   assert.equal(combine([s('a', 2.3 * B), s('rial', 23 * B)]).sources.length, 2);
 });
 
-test('جستجوی کامل با هفت سایت: کارکرده (خودرو۴۵) و صفر (جدول‌های قیمت روز)', async () => {
+test('جستجوی کامل با همهٔ منبع‌ها: کارکرده (خودرو۴۵ و منبع دیگر) و صفر (جدول‌های قیمت روز)', async () => {
   useMarket();
   const used = await lookupAll('پژو 206 تیپ 2 مدل 1400');
   for (const s of used.sources) assert.ok(s.ok, `${s.id}: ${s.error}`);
-  assert.deepEqual(used.summary.sources.map((s) => s.id).sort(), ['bama', 'divar', 'hamrah', 'khodro45']);
+  assert.deepEqual(used.summary.sources.map((s) => s.id).sort(), ['bama', 'divar', 'hamrah', 'khodro45', 'other']);
+  assert.equal(used.summary.sources.find((s) => s.id === 'other').median, 1810 * M, 'میانهٔ بازهٔ ۱۷۷۰ تا ۱۸۵۰');
   assert.equal(used.summary.sources.find((s) => s.id === 'khodro45').median, 1835 * M);
   // جدول‌های قیمت روز فقط صفر کیلومتر دارند
   for (const id of ['iranjib', 'carir', 'khodrobank']) {
@@ -187,4 +190,37 @@ test('اگر یکی از سایت‌های جدید در دسترس نباشد،
   assert.equal(r.sources.find((s) => s.id === 'khodro45').ok, false);
   assert.ok(r.summary.sources.some((s) => s.id === 'iranjib'));
   assert.ok(r.summary.estimate > 2.9 * B && r.summary.estimate < 3.1 * B);
+});
+
+test('منبع دیگر: فهرست تیپ‌ها از پیوندها، و قیمت از ld+json، از بازهٔ متنی، یا از یک عدد', () => {
+  const list = `<a href="/pricing/446/%D9%BE%D8%B1%D8%A7%DB%8C%D8%AF-111-%D9%87%D8%A7%DA%86-%D8%A8%DA%A9-se?model=1396">پراید 111 هاچ بک SE</a>
+    <a href="https://baravard.com/pricing/310/پراید-132-se">  </a><a href="/pricing/446/x">تکراری</a><a href="/about">درباره</a>`;
+  assert.deepEqual(other.catalogFromHtml(list), [
+    { id: '446', slug: '%D9%BE%D8%B1%D8%A7%DB%8C%D8%AF-111-%D9%87%D8%A7%DA%86-%D8%A8%DA%A9-se', name: 'پراید 111 هاچ بک SE' },
+    { id: '310', slug: 'پراید-132-se', name: 'پراید 132 se' },
+  ]);
+
+  const ld = { '@type': 'Product', offers: { '@type': 'AggregateOffer', lowPrice: 640000000, highPrice: 700000000 } };
+  assert.deepEqual(other.parsePricingPage(`<script type="application/ld+json">${JSON.stringify(ld)}</script>`), { low: 640 * M, high: 700 * M, price: null });
+  assert.deepEqual(other.parsePricingPage('<p>قیمت تخمینی: از ۶۴۰ میلیون تا ۷۰۰ میلیون تومان</p>'), { low: 640 * M, high: 700 * M, price: null });
+  assert.deepEqual(other.parsePricingPage('<p>قیمت تخمینی: ۶۴۰٬۰۰۰٬۰۰۰ تا ۷۰۰٬۰۰۰٬۰۰۰ تومان</p>'), { low: 640 * M, high: 700 * M, price: null });
+  assert.deepEqual(other.parsePricingPage('<h2>قیمت روز این خودرو</h2><b>۶۷۰ میلیون تومان</b>'), { low: null, high: null, price: 670 * M });
+  assert.deepEqual(other.parsePricingPage('<p>اطلاعاتی نیست</p>'), { low: null, high: null, price: null });
+});
+
+test('منبع دیگر: نام و نشانی سایت در پاسخ نمی‌آید؛ فقط با سال و برای کارکرده', async () => {
+  useMarket();
+  const r = await lookupAll('سمند سورن پلاس مدل 1399');
+  const o = r.sources.find((s) => s.id === 'other');
+  assert.equal(o.name, 'منبع دیگر');
+  assert.equal(o.items.length, 1);
+  assert.equal(o.items[0].price, 2170 * M);
+  assert.equal(r.summary.sources.find((s) => s.id === 'other').name, 'منبع دیگر');
+  assert.doesNotMatch(JSON.stringify(r), /baravard/i);
+
+  const zero = await lookupAll('سمند سورن پلاس صفر');
+  assert.equal(zero.sources.find((s) => s.id === 'other').items.length, 0);
+  assert.match(zero.sources.find((s) => s.id === 'other').warnings[0], /کارکرده/);
+  const noYear = await lookupAll('سمند سورن پلاس کارکرده');
+  assert.match(noYear.sources.find((s) => s.id === 'other').warnings[0], /سال/);
 });
