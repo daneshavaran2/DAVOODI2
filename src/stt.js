@@ -1,12 +1,15 @@
 // تشخیص گفتار فارسی روی خود سرور با whisper.cpp (بدون وابستگی به گوگل یا سرویس خارجی).
-// مرورگر صدا را به شکل WAV (۱۶ کیلوهرتز، تک‌کاناله، ۱۶ بیتی) می‌فرستد و این ماژول
-// whisper-cli را با زبان فارسی و یک «پرامپت» شامل نام خودروها اجرا می‌کند.
+// مرورگر صدا را به شکل WAV (۱۶ کیلوهرتز، تک‌کاناله، ۱۶ بیتی) می‌فرستد و این ماژول آن را با زبان فارسی و
+// یک «پرامپت» شامل نام خودروها به متن تبدیل می‌کند:
+//   - whisper-server (پیش‌فرض): یک بار اجرا می‌شود و مدل همیشه در حافظه است؛ هر جمله بدون بار کردن مدل.
+//   - whisper-cli: اگر whisper-server نبود یا از کار افتاد، برای هر جمله یک بار اجرا می‌شود.
 
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { constants as FS } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cpuLimit, memoryLimitBytes, memoryStatus } from './memory.js';
 
@@ -62,6 +65,10 @@ export async function sttConfig(env = process.env) {
   }
   return {
     bin: env.WHISPER_BIN || join(ROOT, 'whisper.cpp', 'build', 'bin', 'whisper-cli'),
+    // کنار whisper-cli؛ WHISPER_PERSISTENT=0 یعنی همیشه whisper-cli
+    serverBin: env.WHISPER_PERSISTENT === '0' ? null : env.WHISPER_SERVER_BIN || join(dirname(env.WHISPER_BIN || join(ROOT, 'whisper.cpp', 'build', 'bin', 'whisper-cli')), 'whisper-server'),
+    // جست‌وجوی حریصانه (یک مسیر به جای ۵): در آزمایش حدود ۲۵٪ سریع‌تر، با دقت تقریباً یکسان (۱۵ در برابر ۱۶ از ۳۰)
+    beamSize: Math.max(1, Number(env.WHISPER_BEAM_SIZE) || 1),
     model,
     language: env.WHISPER_LANG || 'fa',
     // به اندازهٔ سهم پردازندهٔ برنامه (نه همهٔ هسته‌های سرور)، حداکثر ۴
@@ -248,6 +255,113 @@ function run(bin, args, timeoutMs) {
 }
 
 /** WAV ← متن فارسی. خروجی: { text, raw, ms, seconds } */
+// ---------------------------------------------------------------- whisper-server (مدل همیشه در حافظه)
+
+const persistent = { state: 'off', child: null, port: null, model: null, ready: null, crashes: [] };
+
+/** وضعیت whisper-server برای /api/health */
+export function persistentStatus() {
+  return { state: persistent.state, model: persistent.model ? persistent.model.split(/[\\/]/).pop() : null };
+}
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.once('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+const exists = (p) => !!p && access(p, FS.X_OK).then(() => true, () => false);
+
+/**
+ * whisper-server را با مدل فعلی راه می‌اندازد (اگر هست). خروجی: promise آماده شدن (true/false).
+ * اگر از کار بیفتد، دوباره راه می‌افتد؛ سه بار در ده دقیقه یعنی خراب است و whisper-cli به کار می‌رود.
+ */
+export async function startPersistent(cfg, { log = console.log } = {}) {
+  cfg = cfg || (await sttConfig());
+  if (persistent.state === 'ready' || persistent.state === 'starting') return persistent.ready;
+  if (persistent.state === 'failed' || !cfg.model || !(await exists(cfg.serverBin))) return false;
+  const port = await freePort();
+  const args = ['-m', cfg.model, '-t', String(cfg.threads), '-l', cfg.language, '-nt', '-sns', '--host', '127.0.0.1', '--port', String(port)];
+  const child = spawn(cfg.serverBin, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  let errTail = '';
+  child.stderr.setEncoding('utf8').on('data', (d) => (errTail = (errTail + d).slice(-3000)));
+  Object.assign(persistent, { state: 'starting', child, port, model: cfg.model });
+  const t0 = Date.now();
+  persistent.ready = new Promise((resolve) => {
+    const poll = async () => {
+      if (persistent.child !== child) return resolve(false);
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2000) });
+        if (r.status < 500 && persistent.child === child) {
+          persistent.state = 'ready';
+          log(`تشخیص گفتار: مدل در حافظه است (whisper-server، ${((Date.now() - t0) / 1000).toFixed(1)} ثانیه برای بار کردن).`);
+          return resolve(true);
+        }
+      } catch {}
+      if (Date.now() - t0 > 180_000) {
+        child.kill('SIGKILL');
+        return resolve(false);
+      }
+      setTimeout(poll, 400);
+    };
+    setTimeout(poll, 300);
+  });
+  child.on('exit', (code, signal) => {
+    if (persistent.child !== child) return;
+    Object.assign(persistent, { state: 'off', child: null });
+    if (signal === 'SIGILL') {
+      disabledReason = 'whisper روی پردازندهٔ این سرور اجرا نشد (Illegal instruction).';
+      persistent.state = 'failed';
+      return console.error(`تشخیص گفتار روی سرور خاموش شد: ${disabledReason}`);
+    }
+    const now = Date.now();
+    persistent.crashes = persistent.crashes.filter((t) => now - t < 10 * 60_000).concat(now);
+    const why = signal ? `سیگنال ${signal}` : `کد ${code}`;
+    if (persistent.crashes.length >= 3) {
+      persistent.state = 'failed';
+      return console.error(`whisper-server سه بار از کار افتاد (${why}: ${errTail.trim().split('\n').pop() || ''})؛ از whisper-cli استفاده می‌شود.`);
+    }
+    console.error(`whisper-server از کار افتاد (${why})؛ دوباره راه می‌افتد.`);
+    setTimeout(() => startPersistent(undefined, { log }).catch(() => {}), 2000).unref();
+  });
+  return persistent.ready;
+}
+
+/** فقط برای تست. */
+export const _persistentChild = () => persistent.child;
+
+export function stopPersistent() {
+  const c = persistent.child;
+  Object.assign(persistent, { state: 'off', child: null });
+  c?.kill();
+}
+
+async function viaServer(wav, cfg, seconds) {
+  const fd = new FormData();
+  fd.append('file', new Blob([wav], { type: 'audio/wav' }), 'audio.wav');
+  const ac = audioCtxArgs(cfg, seconds);
+  const fields = {
+    language: cfg.language,
+    response_format: 'json',
+    no_timestamps: 'true',
+    suppress_nst: 'true',
+    beam_size: String(cfg.beamSize),
+    best_of: String(cfg.beamSize),
+    audio_ctx: ac.length ? ac[1] : '0',
+  };
+  if (cfg.prompt) fields.prompt = cfg.prompt;
+  for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+  const res = await fetch(`http://127.0.0.1:${persistent.port}/inference`, { method: 'POST', body: fd, signal: AbortSignal.timeout(cfg.timeoutMs) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.error) throw new Error(body.error || `whisper-server: HTTP ${res.status}`);
+  return String(body.text || '');
+}
+
 /** onStart: وقتی نوبت این صدا شد و whisper شروع کرد (برای نمایش «در صف» / «در حال تبدیل») */
 export async function transcribe(wav, cfg, { onStart } = {}) {
   cfg = cfg || (await sttConfig());
@@ -259,22 +373,38 @@ export async function transcribe(wav, cfg, { onStart } = {}) {
 
   const release = await slot(cfg.concurrency);
   onStart?.();
-  const dir = await mkdtemp(join(tmpdir(), 'gheymat-stt-'));
   const t0 = Date.now();
+  let dir = null;
   try {
-    const file = join(dir, 'audio.wav');
-    await writeFile(file, wav);
-    const args = ['-m', cfg.model, '-f', file, '-l', cfg.language, '-t', String(cfg.threads), '-nt', '-np', '-sns'];
-    if (cfg.prompt) args.push('--prompt', cfg.prompt);
-    args.push(...audioCtxArgs(cfg, info.seconds), ...cfg.extraArgs);
-    const raw = await run(cfg.bin, args, cfg.timeoutMs);
+    // whisper-server در حال بار کردن مدل است: صبر (بار کردن هم‌زمان مدل با whisper-cli حافظه را دو برابر می‌کند)
+    if (persistent.state === 'starting' && persistent.model === cfg.model) await persistent.ready;
+    let raw = null;
+    let via = 'cli';
+    if (persistent.state === 'ready' && persistent.model === cfg.model && !cfg.extraArgs.length) {
+      try {
+        raw = await viaServer(wav, cfg, info.seconds);
+        via = 'server';
+      } catch (e) {
+        console.error(`whisper-server جواب نداد (${e.message})؛ این بار با whisper-cli.`);
+      }
+    }
+    if (raw === null) {
+      dir = await mkdtemp(join(tmpdir(), 'gheymat-stt-'));
+      const file = join(dir, 'audio.wav');
+      await writeFile(file, wav);
+      const args = ['-m', cfg.model, '-f', file, '-l', cfg.language, '-t', String(cfg.threads), '-nt', '-np', '-sns'];
+      args.push('-bs', String(cfg.beamSize), '-bo', String(cfg.beamSize));
+      if (cfg.prompt) args.push('--prompt', cfg.prompt);
+      args.push(...audioCtxArgs(cfg, info.seconds), ...cfg.extraArgs);
+      raw = await run(cfg.bin, args, cfg.timeoutMs);
+    }
     const ms = Date.now() - t0;
-    recent.push({ ms, seconds: Math.round(info.seconds * 10) / 10, threads: cfg.threads, at: new Date().toISOString() });
+    recent.push({ ms, seconds: Math.round(info.seconds * 10) / 10, threads: cfg.threads, via, at: new Date().toISOString() });
     if (recent.length > 10) recent.shift();
-    console.log(`تبدیل گفتار: ${info.seconds.toFixed(1)} ثانیه صدا در ${(ms / 1000).toFixed(1)} ثانیه (${cfg.threads} رشته)`);
-    return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms, seconds: info.seconds };
+    console.log(`تبدیل گفتار: ${info.seconds.toFixed(1)} ثانیه صدا در ${(ms / 1000).toFixed(1)} ثانیه (${cfg.threads} رشته، ${via === 'server' ? 'whisper-server' : 'whisper-cli'})`);
+    return { text: cleanTranscript(raw, cfg.prompt), raw: raw.trim(), ms, seconds: info.seconds, via };
   } finally {
     release();
-    await rm(dir, { recursive: true, force: true });
+    if (dir) await rm(dir, { recursive: true, force: true });
   }
 }

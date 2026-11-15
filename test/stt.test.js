@@ -186,6 +186,13 @@ test('API: تبدیل جداگانه (async): شمارهٔ کار فوراً، �
   assert.ok(r.ms >= 700, 'زمان همین تبدیل');
   assert.ok(r.estimateMs > 0, 'زمان تخمینی از اجراهای اخیر');
 
+  // با wait: سرور منتظر می‌ماند و متن در همان درخواست می‌آید
+  const direct = await fetch(`${base}/api/transcribe?async=1&wait=5`, { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: makeWav(1.5) });
+  assert.equal(direct.status, 200);
+  const d = await direct.json();
+  assert.equal(d.state, 'done');
+  assert.equal(d.text, 'پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰');
+
   assert.equal((await fetch(`${base}/api/transcribe?job=nope`)).status, 404);
   assert.equal((await fetch(`${base}/api/transcribe?async=1`, { method: 'POST', body: Buffer.from('x'.repeat(100)) })).status, 400);
 

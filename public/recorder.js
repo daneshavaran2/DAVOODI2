@@ -78,7 +78,7 @@ export function encodeWav(f32, rate = TARGET_RATE) {
  * { wav, seconds, hadSpeech } می‌رسد. ضبط خودکار تمام می‌شود وقتی:
  * بعد از گفتن، silenceMs سکوت شود؛ یا تا noSpeechMs صدایی نیاید؛ یا maxMs بگذرد.
  */
-export async function startRecording({ onLevel, onSpeech, maxMs = 12000, silenceMs = 1200, noSpeechMs = 7000 } = {}) {
+export async function startRecording({ onLevel, onSpeech, maxMs = 12000, silenceMs = 1000, noSpeechMs = 7000 } = {}) {
   // AudioContext پیش از پرسیدن اجازهٔ میکروفون و در همان لمس کاربر ساخته و روشن می‌شود؛
   // سافاری آیفون پس از پنجرهٔ اجازه، دیگر اجازهٔ روشن کردنش را نمی‌دهد و صدایی ضبط نمی‌شود.
   const Ctx = window.AudioContext || window.webkitAudioContext;

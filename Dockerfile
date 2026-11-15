@@ -3,11 +3,12 @@
 # ساخت کوتاه است تا از سقف ۵ دقیقه‌ای ساخت در لیارا رد نشود:
 #   - whisper-cli از پیش ساخته شده و در vendor/whisper.cpp است (منشأ، تنظیمات و checksumها همان‌جا؛
 #     بازسازی: bash scripts/build-whisper-linux.sh)
-#   - مدل Whisper turbo q5_0 (۵۴۷ مگابایت، با ۱ گیگابایت حافظه کار می‌کند) هنگام ساخت روی سرور آلمانِ لیارا
+#   - مدل Whisper turbo q8_0 (۸۷۴ مگابایت؛ دست‌کم ۱٫۴ گیگابایت حافظه) هنگام ساخت روی سرور آلمانِ لیارا
 #     دانلود و داخل تصویر گذاشته می‌شود؛ بدون دیسک و بدون دسترسی سرور ایران به huggingface هم تشخیص گفتار
-#     روی سرور کار می‌کند (برای آیفون لازم است؛ سافاری فارسی را خودش تشخیص نمی‌دهد).
-#     بدون مدل: --build-arg WHISPER_BUNDLE=none. اگر دانلود ممکن نشد، ساخت ادامه می‌یابد.
-#   - با ۱٫۴ گیگابایت حافظه یا بیشتر و یک دیسک روی /app/whisper/models، مدل سریع‌تر q8_0 هنگام اجرا دانلود می‌شود.
+#     روی سرور کار می‌کند (برای آیفون لازم است؛ سافاری فارسی را خودش تشخیص نمی‌دهد). با ۲ هسته هر جمله
+#     حدود ۳ ثانیه (whisper-server، مدل همیشه در حافظه).
+#     پلن ۱ گیگابایتی: --build-arg WHISPER_BUNDLE=large-v3-turbo-q5_0 (کندتر). بدون مدل: WHISPER_BUNDLE=none.
+#     اگر دانلود ممکن نشد، ساخت ادامه می‌یابد.
 #
 # اگر Docker Hub محدودیت داد:  --build-arg BASE_REGISTRY=mirror.gcr.io/library/
 
@@ -25,7 +26,7 @@ ENV NODE_ENV=production \
 WORKDIR /app
 
 # مدل داخل تصویر، پیش از کپی کد تا با هر تغییر کد دوباره دانلود نشود
-ARG WHISPER_BUNDLE=large-v3-turbo-q5_0
+ARG WHISPER_BUNDLE=large-v3-turbo-q8_0
 COPY scripts/bundle-model.mjs /tmp/bundle-model.mjs
 RUN node /tmp/bundle-model.mjs "$WHISPER_BUNDLE" /app/whisper/bundled; rm -f /tmp/bundle-model.mjs
 

@@ -17,7 +17,7 @@ import { lookupAll, SOURCES } from './src/lookup.js';
 import { CITIES, DEFAULT_CITIES } from './src/sources/divar.js';
 import { diagnose } from './src/diagnose.js';
 import { findRivals } from './src/rivals.js';
-import { estimateMs, LIMITS, parseWav, recentRuns, SttError, sttConfig, sttStatus, transcribe } from './src/stt.js';
+import { estimateMs, LIMITS, parseWav, persistentStatus, recentRuns, startPersistent, stopPersistent, SttError, sttConfig, sttStatus, transcribe } from './src/stt.js';
 import { cpuLimit } from './src/memory.js';
 import { download, ensureModel } from './src/model.js';
 
@@ -106,7 +106,16 @@ async function sttInfo({ detail = false } = {}) {
   if (s.available) {
     if (!detail) return { server: true, model: s.modelName, estimateMs: estimateMs() };
     const cfg = await sttConfig();
-    return { server: true, model: s.modelName, threads: cfg.threads, cpu: await cpuLimit(), memoryMB: s.memoryMB, estimateMs: estimateMs(), recent: recentRuns() };
+    return {
+      server: true,
+      model: s.modelName,
+      threads: cfg.threads,
+      cpu: await cpuLimit(),
+      memoryMB: s.memoryMB,
+      persistent: persistentStatus(),
+      estimateMs: estimateMs(),
+      recent: recentRuns(),
+    };
   }
   if (DEMO) return { server: true, model: 'demo', demo: true };
   // چرا تشخیص گفتار سرور فعال نیست (برای /api/health و عیب‌یابی)
@@ -127,11 +136,20 @@ function startJob(wav) {
   const id = randomBytes(9).toString('base64url');
   const job = { id, state: 'queued', created: Date.now() };
   jobs.set(id, job);
-  transcribe(wav, undefined, { onStart: () => Object.assign(job, { state: 'running', started: Date.now() }) })
+  job.done = transcribe(wav, undefined, { onStart: () => Object.assign(job, { state: 'running', started: Date.now() }) })
     .then((r) => Object.assign(job, { state: 'done', text: r.text, ms: r.ms, seconds: r.seconds }))
     .catch((e) => Object.assign(job, { state: 'error', error: e instanceof SttError ? e.message : 'تبدیل گفتار به متن ممکن نشد.' }))
     .finally(() => setTimeout(() => jobs.delete(id), JOB_TTL_MS).unref());
   return job;
+}
+
+/** تا waitS ثانیه (حداکثر ۲۵) صبر برای پایان کار؛ تبدیل کوتاه در همان درخواست جواب می‌گیرد، بی‌پرسش دوباره */
+async function waitForJob(job, waitS) {
+  const ms = Math.min(25, Math.max(0, Number(waitS) || 0)) * 1000;
+  if (!ms || job.state === 'done' || job.state === 'error') return;
+  let timer;
+  await Promise.race([job.done, new Promise((r) => (timer = setTimeout(r, ms)))]);
+  clearTimeout(timer);
 }
 
 function jobView(job) {
@@ -210,6 +228,7 @@ async function handle(req, res) {
       if (req.method === 'GET' && url.searchParams.get('job')) {
         const job = jobs.get(url.searchParams.get('job'));
         if (!job) return send(res, 404, { error: 'این تبدیل پیدا نشد (شاید سرور دوباره راه افتاده است)؛ دوباره بگویید.' });
+        await waitForJob(job, url.searchParams.get('wait'));
         return send(res, 200, jobView(job), { 'Cache-Control': 'no-store' });
       }
       if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' }, { Allow: 'POST' });
@@ -229,7 +248,10 @@ async function handle(req, res) {
           if (!st.available) throw new SttError(st.disabledReason || 'تشخیص گفتار روی سرور نصب نشده است.', 503);
           const pending = [...jobs.values()].filter((j) => j.state === 'queued' || j.state === 'running').length;
           if (pending >= MAX_PENDING_JOBS) throw new SttError('سرور الان سرش شلوغ است؛ چند لحظه بعد دوباره بگویید.', 429);
-          return send(res, 202, jobView(startJob(wav)), { 'Cache-Control': 'no-store' });
+          const job = startJob(wav);
+          await waitForJob(job, url.searchParams.get('wait'));
+          const finished = job.state === 'done' || job.state === 'error';
+          return send(res, finished ? 200 : 202, jobView(job), { 'Cache-Control': 'no-store' });
         }
         const r = await transcribe(wav);
         return send(res, 200, { text: r.text, ms: r.ms, seconds: r.seconds }, { 'Cache-Control': 'no-store' });
@@ -341,6 +363,13 @@ function networkAddresses() {
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
   logRequests = true;
+  // با توقف برنامه، whisper-server هم بسته شود
+  for (const sig of ['SIGTERM', 'SIGINT']) {
+    process.once(sig, () => {
+      stopPersistent();
+      process.exit(0);
+    });
+  }
   instrument(server);
   const addrs = networkAddresses();
   console.log(`نشانی‌های شبکهٔ کانتینر: ${addrs.join('، ') || 'هیچ'}${addrs.some((a) => a.includes(':')) ? '' : ' (بدون IPv6)'}`);
@@ -357,12 +386,16 @@ if (isMain) {
     const s = await sttStatus();
     if (s.available) {
       const cfg = await sttConfig();
-      return console.log(`تشخیص گفتار روی سرور: فعال (${s.modelName}، ${cfg.threads} رشته؛ سهم پردازنده: ${await cpuLimit()} هسته)`);
+      console.log(`تشخیص گفتار روی سرور: فعال (${s.modelName}، ${cfg.threads} رشته؛ سهم پردازنده: ${await cpuLimit()} هسته)`);
+      startPersistent(cfg).catch((e) => console.error('whisper-server:', e.message));
+      return;
     }
     if (s.bin && !s.model && !DEMO && !s.disabledReason) {
       // whisper هست ولی مدل نه (مثلاً اولین اجرای کانتینر): دانلود در پس‌زمینه
       console.log('تشخیص گفتار روی سرور: مدل هنوز نیست؛ تا وقتی آماده شود، تشخیص گفتار مرورگر استفاده می‌شود.');
-      ensureModel().catch((e) => console.error('دانلود مدل:', e));
+      ensureModel()
+        .then(async (state) => state === 'ready' && (await sttStatus()).available && startPersistent())
+        .catch((e) => console.error('دانلود مدل:', e));
       return;
     }
     console.log(

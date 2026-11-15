@@ -118,13 +118,15 @@ function setupVoice() {
   if (!window.isSecureContext) {
     return disableMic('برای استفاده از میکروفون، سایت باید با HTTPS باز شود. فعلاً نام خودرو را بنویسید.');
   }
+  // کروم اندروید و کامپیوتر: تشخیص گفتار خود مرورگر، فوری و هم‌زمان با گفتن؛ اگر کار نکرد، سرور
+  if (browserSR) {
+    voiceMode = 'browser';
+    if (serverStt && canRecord()) import('/recorder.js').then((m) => (recorder = m), () => {});
+    return;
+  }
   if (serverStt && canRecord()) {
     voiceMode = 'server';
     import('/recorder.js').then((m) => (recorder = m), () => {});
-    return;
-  }
-  if (browserSR) {
-    voiceMode = 'browser';
     return;
   }
   if (IS_IOS && IN_APP) return disableMic('میکروفون در مرورگرِ داخل این برنامه کار نمی‌کند. سایت را در سافاری باز کنید، یا نام خودرو را بنویسید.');
@@ -193,40 +195,52 @@ async function startServerVoice() {
 }
 
 const TRANSCRIBE_MAX_MS = 180_000;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * صدا به سرور فرستاده می‌شود و فوراً شمارهٔ کار برمی‌گردد؛ سپس هر ۱٫۵ ثانیه نتیجه پرسیده می‌شود
- * (تبدیل روی سرور کم‌هسته ده‌ها ثانیه طول می‌کشد و یک درخواست طولانی را پراکسی سکو قطع می‌کند).
+ * صدا به سرور فرستاده می‌شود و سرور تا ۲۰ ثانیه منتظر متن می‌ماند (معمولاً همان درخواست جواب می‌گیرد).
+ * اگر بیشتر طول کشید، با شمارهٔ کار دوباره پرسیده می‌شود؛ پس درخواست طولانی را پراکسی سکو قطع نمی‌کند.
  */
 async function serverTranscribe(wav) {
   const t0 = Date.now();
   const fail = (msg, typeInstead = false) => Object.assign(new Error(msg), { typeInstead });
-  let res = await fetch('/api/transcribe?async=1', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
-  let data = await res.json().catch(() => ({}));
-  if (res.status === 503 && browserSR) {
-    // تشخیص گفتار سرور در دسترس نیست؛ از این به بعد تشخیص گفتار مرورگر
-    voiceMode = 'browser';
-    throw fail('تشخیص گفتار سرور در دسترس نیست؛ دوباره روی میکروفون بزنید (این بار مرورگر گوش می‌دهد).');
-  }
-  if (res.status === 503) throw fail('تبدیل گفتار به متن الان در دسترس نیست؛ لطفاً نام خودرو را بنویسید.', true);
-  if (!res.ok) throw fail(data.error || `خطای سرور (${res.status})`);
-  // سرور قدیمی‌تر یا حالت نمایشی: متن همان‌جا آمده است
-  while (data.job && data.state !== 'done') {
+  let est = null;
+  let queued = false;
+  const tick = () => {
+    const sec = Math.round((Date.now() - t0) / 1000);
+    if (sec < 2) return;
+    const hint = est ? `؛ معمولاً حدود ${fa(Math.max(1, Math.round(est / 1000)))} ثانیه` : '';
+    setStatus(queued ? `در صف تبدیل گفتار… ${fa(sec)} ثانیه` : `در حال تبدیل گفتار به متن… ${fa(sec)} ثانیه${hint}`);
+  };
+  const ticker = setInterval(tick, 1000);
+  try {
+    let res = await fetch('/api/transcribe?async=1&wait=20', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: wav });
+    let data = await res.json().catch(() => ({}));
+    if (res.status === 503 && browserSR) {
+      voiceMode = 'browser';
+      throw fail('تشخیص گفتار سرور در دسترس نیست؛ دوباره روی میکروفون بزنید (این بار مرورگر گوش می‌دهد).');
+    }
+    if (res.status === 503) throw fail('تبدیل گفتار به متن الان در دسترس نیست؛ لطفاً نام خودرو را بنویسید.', true);
+    if (!res.ok && res.status !== 202) throw fail(data.error || `خطای سرور (${res.status})`);
+    // سرور قدیمی‌تر یا حالت نمایشی: متن همان‌جا آمده است
+    while (data.job && data.state !== 'done') {
+      if (data.state === 'error') throw fail(data.error || 'تبدیل گفتار به متن ممکن نشد.', true);
+      if (Date.now() - t0 > TRANSCRIBE_MAX_MS) throw fail('تبدیل گفتار به متن روی سرور خیلی طول کشید؛ لطفاً نام خودرو را بنویسید.', true);
+      est = data.estimateMs || est;
+      queued = data.state === 'queued';
+      res = await fetch(`/api/transcribe?job=${encodeURIComponent(data.job)}&wait=20`, { cache: 'no-store' }).catch(() => null);
+      if (!res) {
+        await new Promise((r) => setTimeout(r, 1000)); // قطع کوتاه شبکهٔ گوشی: دوباره بپرس
+        continue;
+      }
+      const next = await res.json().catch(() => null);
+      if (!res.ok) throw fail(next?.error || `خطای سرور (${res.status})`, true);
+      if (next) data = next;
+    }
     if (data.state === 'error') throw fail(data.error || 'تبدیل گفتار به متن ممکن نشد.', true);
-    const waited = Date.now() - t0;
-    if (waited > TRANSCRIBE_MAX_MS) throw fail('تبدیل گفتار به متن روی سرور خیلی طول کشید؛ لطفاً نام خودرو را بنویسید.', true);
-    const sec = Math.round(waited / 1000);
-    const est = data.estimateMs ? `؛ معمولاً حدود ${fa(Math.round(data.estimateMs / 1000))} ثانیه` : '';
-    setStatus(data.state === 'queued' ? `در صف تبدیل گفتار… ${fa(sec)} ثانیه` : `در حال تبدیل گفتار به متن… ${fa(sec)} ثانیه${est}`);
-    await sleep(1500);
-    res = await fetch(`/api/transcribe?job=${encodeURIComponent(data.job)}`, { cache: 'no-store' }).catch(() => null);
-    if (!res) continue; // قطع کوتاه شبکهٔ گوشی: دوباره بپرس
-    const next = await res.json().catch(() => null);
-    if (!res.ok) throw fail(next?.error || `خطای سرور (${res.status})`, true);
-    if (next) data = next;
+    return data;
+  } finally {
+    clearInterval(ticker);
   }
-  return data;
 }
 
 // ---------- حالت browser
@@ -265,7 +279,14 @@ function startBrowserVoice() {
   };
   rec.onerror = (e) => {
     failed = e.error !== 'aborted';
-    if (failed) setStatus(SPEECH_ERRORS[e.error] || `خطای تشخیص گفتار: ${e.error}`, true);
+    if (!failed) return;
+    // تشخیص گفتار مرورگر در دسترس نیست (مثلاً سرویس گوگل باز نمی‌شود): از این به بعد سرور
+    if (['network', 'service-not-allowed', 'language-not-supported'].includes(e.error) && config.stt?.server && canRecord()) {
+      voiceMode = 'server';
+      import('/recorder.js').then((m) => (recorder = m), () => {});
+      return setStatus('دوباره دکمه را بزنید و بگویید؛ این بار گفتار روی سرور به متن تبدیل می‌شود.', true);
+    }
+    setStatus(SPEECH_ERRORS[e.error] || `خطای تشخیص گفتار: ${e.error}`, true);
   };
   rec.onend = () => {
     setListening(false);

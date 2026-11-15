@@ -21,10 +21,10 @@ docker run --rm -v "$OUT:/out" "$IMAGE" bash -euc "
   cmake -S /src -B /src/build -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_TESTS=OFF \
     -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DBUILD_SHARED_LIBS=ON \
     '-DCMAKE_INSTALL_RPATH=\$ORIGIN' -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON > /dev/null
-  cmake --build /src/build -j\$(nproc) --config Release --target whisper-cli > /dev/null
+  cmake --build /src/build -j\$(nproc) --config Release --target whisper-cli whisper-server > /dev/null
   cp -a /src/build/bin/. /out/
   cp /src/LICENSE /out/LICENSE
-  find /out -type f \( -name '*.so*' -o -name whisper-cli \) -exec strip --strip-unneeded {} +
+  find /out -type f \( -name '*.so*' -o -name whisper-cli -o -name whisper-server \) -exec strip --strip-unneeded {} +
   gcc --version | head -1
   chown -R $(id -u):$(id -g) /out
 "
