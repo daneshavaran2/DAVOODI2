@@ -201,7 +201,7 @@ if (isMain) {
     if (s.available) return console.log(`تشخیص گفتار روی سرور: فعال (${s.modelName})`);
     if (s.bin && !s.model && !DEMO && !s.disabledReason) {
       // whisper هست ولی مدل نه (مثلاً اولین اجرای کانتینر): دانلود در پس‌زمینه
-      console.log('تشخیص گفتار روی سرور: مدل هنوز نیست؛ دانلود در پس‌زمینه شروع شد. تا آن موقع تشخیص گفتار مرورگر.');
+      console.log('تشخیص گفتار روی سرور: مدل هنوز نیست؛ تا وقتی آماده شود، تشخیص گفتار مرورگر استفاده می‌شود.');
       ensureModel().catch((e) => console.error('دانلود مدل:', e));
       return;
     }

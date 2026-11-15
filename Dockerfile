@@ -11,10 +11,12 @@
 ARG BASE_REGISTRY=
 FROM ${BASE_REGISTRY}node:22-trixie-slim
 
+# WHISPER_REQUIRE_DISK: مدل فقط وقتی خودکار دانلود می‌شود که دیسکی به /app/whisper/models وصل باشد
 ENV NODE_ENV=production \
     PORT=3000 \
     HOST=0.0.0.0 \
-    TRUST_PROXY=1
+    TRUST_PROXY=1 \
+    WHISPER_REQUIRE_DISK=1
 WORKDIR /app
 
 # whisper-cli و نسخه‌های CPU آن (به glibc ۲٫۳۸+ نیاز دارد؛ trixie دارد)
@@ -25,6 +27,9 @@ COPY scripts ./scripts
 COPY public ./public
 # بازار نمونه فقط برای حالت نمایشی (DEMO=1)
 COPY test/fixtures/market.json ./test/fixtures/market.json
+# پوشهٔ مدل از پیش ساخته و برای هر کاربری قابل نوشتن است؛ چون سکو ممکن است کانتینر را با کاربر
+# غیر root (حتی با UID دلخواه) اجرا کند و آن وقت ساختن این پوشه هنگام اجرا ممکن نیست
+RUN mkdir -p /app/whisper/models && chmod 0777 /app/whisper/models
 
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

@@ -5,7 +5,7 @@
 
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { access, mkdir, rename, rm, stat } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -21,6 +21,18 @@ export const KNOWN_SHA256 = {
 export const download = { state: 'idle', model: null, percent: 0, error: null };
 
 const exists = (p) => access(p).then(() => true, () => false);
+
+/** آیا این پوشه جایی جداگانه mount شده است (مثلاً دیسک لیارا)؟ */
+export async function isMountPoint(dir, mountinfo = '/proc/self/mountinfo') {
+  try {
+    const real = await realpath(dir);
+    const text = await readFile(mountinfo, 'utf8');
+    // ستون پنجم هر خط، مسیر mount است (فاصله‌ها به‌صورت \040 نوشته می‌شوند)
+    return text.split('\n').some((line) => (line.split(' ')[4] || '').replace(/\\040/g, ' ') === real);
+  } catch {
+    return false;
+  }
+}
 
 async function sha256(file) {
   const h = createHash('sha256');
@@ -65,6 +77,15 @@ export async function ensureModel({ env = process.env, modelsDir = MODELS_DIR, f
     (modelsDir === MODELS_DIR && cfg.model && (await exists(cfg.model)));
   if (present) return (download.state = 'ready');
   if (name === 'none' || env.WHISPER_AUTO_DOWNLOAD === '0') return (download.state = 'skipped');
+
+  // در کانتینر (WHISPER_REQUIRE_DISK=1 در Dockerfile): بدون دیسک دائمی دانلود نمی‌شود؛ ۸۷۰ مگابایت
+  // در فضای موقت کانتینر ممکن است از سقف پلن بگذرد، کانتینر از نو شروع شود و دانلود هم از نو (حلقه).
+  if (env.WHISPER_REQUIRE_DISK === '1' && env.WHISPER_AUTO_DOWNLOAD !== '1' && !(await isMountPoint(modelsDir))) {
+    download.state = 'skipped';
+    download.error = `برای تشخیص گفتار روی سرور، یک دیسک به ${modelsDir} وصل کنید (راهنما در README، بخش لیارا).`;
+    log(`مدل دانلود نشد: ${download.error} تا آن موقع تشخیص گفتار مرورگر استفاده می‌شود.`);
+    return download.state;
+  }
 
   const mem = await memoryStatus(cfg.minMemoryMB);
   if (!mem.ok) {

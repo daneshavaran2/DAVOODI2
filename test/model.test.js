@@ -104,3 +104,27 @@ test('WHISPER_MODEL_NAME=none: هیچ دانلودی نیست', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'model-'));
   assert.equal(await ensureModel({ env: { WHISPER_MODEL_NAME: 'none' }, modelsDir: dir, log: quiet }), 'skipped');
 });
+
+test('در کانتینر بدون دیسک (WHISPER_REQUIRE_DISK=1) مدل دانلود نمی‌شود', async (t) => {
+  const { srv, seen, url } = await startServer();
+  t.after(() => srv.close());
+  const dir = await mkdtemp(join(tmpdir(), 'model-'));
+  const env = baseEnv(url, { WHISPER_REQUIRE_DISK: '1' });
+  assert.equal(await ensureModel({ env, modelsDir: dir, log: quiet }), 'skipped');
+  assert.equal(seen.length, 0);
+  assert.match(download.error, /دیسک/);
+  // با WHISPER_AUTO_DOWNLOAD=1 صریحاً اجازه داده می‌شود
+  assert.equal(await ensureModel({ env: { ...env, WHISPER_AUTO_DOWNLOAD: '1' }, modelsDir: dir, log: quiet }), 'ready');
+});
+
+test('isMountPoint: تشخیص دیسک وصل‌شده از روی mountinfo', async () => {
+  const { isMountPoint } = await import('../src/model.js');
+  const dir = await mkdtemp(join(tmpdir(), 'mnt-'));
+  const info = join(dir, 'mountinfo');
+  const real = (await import('node:fs/promises')).realpath;
+  const rdir = await real(dir);
+  await writeFile(info, `22 1 8:1 / / rw - ext4 /dev/sda1 rw\n99 22 8:2 / ${rdir} rw - ext4 /dev/sdb rw\n`);
+  assert.equal(await isMountPoint(dir, info), true);
+  assert.equal(await isMountPoint(tmpdir(), info), false);
+  assert.equal(await isMountPoint(dir, join(dir, 'missing')), false);
+});

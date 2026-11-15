@@ -1,15 +1,18 @@
 #!/bin/sh
-# شروع برنامه در کانتینر Docker.
-# پوشهٔ مدل‌ها (که ممکن است دیسک لیارا باشد و مال root) برای کاربر node قابل نوشتن می‌شود،
-# سپس برنامه با کاربر node (نه root) اجرا می‌شود.
-set -e
+# شروع برنامه در کانتینر Docker. هیچ مرحله‌ای نباید جلوی بالا آمدن برنامه را بگیرد:
+# سکوهایی مثل لیارا ممکن است کانتینر را با کاربر غیر root، یا با root ولی بدون اجازهٔ تغییر کاربر،
+# اجرا کنند. در آن صورت این مراحل بی‌صدا رد می‌شوند و برنامه با کاربر فعلی اجرا می‌شود.
 
 MODELS_DIR="${WHISPER_MODELS_DIR:-/app/whisper/models}"
-mkdir -p "$MODELS_DIR"
+mkdir -p "$MODELS_DIR" 2>/dev/null
 
 if [ "$(id -u)" = "0" ]; then
-  chown node:node "$MODELS_DIR" 2>/dev/null || echo "هشدار: مالکیت $MODELS_DIR تغییر نکرد؛ شاید دانلود مدل ممکن نباشد."
-  exec setpriv --reuid=node --regid=node --init-groups node server.js
+  # پوشهٔ مدل (شاید دیسک لیارا که مال root است) برای کاربر node قابل نوشتن شود، سپس اجرا با کاربر node
+  chown node:node "$MODELS_DIR" 2>/dev/null
+  if setpriv --reuid=node --regid=node --init-groups true 2>/dev/null; then
+    exec setpriv --reuid=node --regid=node --init-groups node server.js
+  fi
+  echo "اجرا با کاربر node ممکن نشد؛ برنامه با کاربر فعلی اجرا می‌شود."
 fi
 
 exec node server.js
