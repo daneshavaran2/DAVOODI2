@@ -1,7 +1,7 @@
 // پردازش متن فارسی: یکسان‌سازی حروف و ارقام، تبدیل عدد نوشتاری به رقم،
 // و جدا کردن «نام خودرو»، «سال ساخت» و «صفر/کارکرده» از جملهٔ کاربر.
 
-import { brandsIn, COLOR_PHRASES, joinSpokenCodes, letterOptions, protectLetterBrands } from './catalog.js';
+import { brandsIn, COLOR_PHRASES, joinSpokenCodes, letterOptions, MODEL_NUMBERS, protectLetterBrands } from './catalog.js';
 
 const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
 const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
@@ -228,10 +228,12 @@ export function extractYear(text, now = new Date()) {
       if (y) return { year: y, rest: [...tok.slice(0, i), ...tok.slice(i + 1)].join(' ') };
     }
   }
-  // سال میلادی (برای خودروهای وارداتی) در هر جای جمله، ولی نه بعد از «پژو» (پژو 2008، 3008، 5008)
+  // سال میلادی (برای خودروهای وارداتی) در هر جای جمله، ولی نه بعد از «پژو» (پژو 2008، 3008، 5008)؛
+  // تنها هم سال است («2026»)، مگر خودش نام مدل باشد («2008»)
   const last = tok.length - 1;
-  for (let i = last; i > 0; i--) {
-    if (/^(19[5-9]\d|20[0-4]\d)$/.test(tok[i]) && !/^(پژو|peugeot)$/.test(tok[i - 1])) {
+  for (let i = last; i >= 0; i--) {
+    if (i === 0 && tok.length === 1 && MODEL_NUMBERS.has(tok[0])) break;
+    if (/^(19[5-9]\d|20[0-4]\d)$/.test(tok[i]) && !/^(پژو|peugeot)$/.test(tok[i - 1] || '')) {
       const y = toYear(tok[i], now);
       if (y) return { year: y, rest: [...tok.slice(0, i), ...tok.slice(i + 1)].join(' ') };
     }

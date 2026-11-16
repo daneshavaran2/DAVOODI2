@@ -171,5 +171,11 @@ export const CATALOG_SNAP_WORDS = CATALOG_WORDS.filter((w) => w.length >= 4 && !
 /** نام کامل خودروها («بهمن رسپکت»، «چانگان CS55») برای دستور مدل‌های گفت‌وگوی صوتی */
 export const CATALOG_NAMES = [...new Set(MODELS.map(([b, m]) => `${b} ${m}`))];
 
+// عددهایی که خودشان نام مدل‌اند (۲۰۶، ۱۳۱، ۲۰۰۸، …): از فهرست و مدل‌های رایج داخلی
+export const MODEL_NUMBERS = new Set([
+  ...MODELS.flatMap(([, m]) => norm(m).split(' ')).filter((t) => /^\d{2,4}$/.test(t)),
+  ...'111 131 132 141 151 206 207 301 405 407 508 2008 3008 5008 110 120 315 530 550'.split(' '),
+]);
+
 /** رنگ‌ها: عبارت‌ها (بلندترین اول) و کلمه‌های تکی */
 export const COLOR_PHRASES = [...new Set(COLORS.map(norm))].sort((a, b) => b.length - a.length);

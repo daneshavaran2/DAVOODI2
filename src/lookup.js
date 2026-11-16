@@ -2,6 +2,7 @@
 
 import { aggregate, quantile } from './aggregate.js';
 import { parseQuery, toFaDigits } from './text.js';
+import { MODEL_NUMBERS } from './catalog.js';
 import * as bama from './sources/bama.js';
 import * as divar from './sources/divar.js';
 import * as hamrah from './sources/hamrah.js';
@@ -52,10 +53,20 @@ async function canonicalize(query) {
 /** پرسش متنی (همان چیزی که کاربر گفته) ← قیمت‌ها از همهٔ سایت‌ها و جمع‌بندی. */
 export async function lookupAll(raw, opts = {}) {
   const query = parseQuery(raw);
+  const example = 'مثلاً بگویید: «پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰».';
   if (!query.carText) {
-    return { query, error: 'نام خودرو تشخیص داده نشد. مثلاً بگویید: «پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰».', sources: [] };
+    // فقط سال شنیده شد («۲۰۲۶»، «مدل ۱۴۰۴»): نام خودرو را بپرس، نه قیمتِ هر آگهی‌ای که این عدد را دارد
+    const error = query.year
+      ? `سال ${toFaDigits(query.year.value)} را شنیدم، ولی نام خودرو را نه. نام خودرو را هم بگویید؛ مثلاً «لندکروزر مدل ${toFaDigits(query.year.value)}».`
+      : `نام خودرو تشخیص داده نشد. ${example}`;
+    return { query, error, sources: [] };
   }
   const canonical = await canonicalize(query);
+  // فقط عدد گفته شد و آن عدد نام هیچ مدلی نیست («۹۸»، «۲۵۰۰۰»): جستجوی آگهی‌های اتفاقی نه
+  const tok = query.carText.split(' ');
+  if (!canonical && tok.every((t) => /^\d+$/.test(t)) && !tok.some((t) => MODEL_NUMBERS.has(t))) {
+    return { query, error: `«${toFaDigits(query.carText)}» نام خودرو نیست. ${example}`, sources: [] };
+  }
   const results = await Promise.all(SOURCES.map((s) => runSource(s, query, { ...opts, canonical })));
   dropUnrealPrices(results);
   const agg = aggregate(results, query);
