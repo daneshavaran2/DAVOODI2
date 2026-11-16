@@ -59,7 +59,7 @@ test('parseQuery: جمله‌های گفتاری کامل', () => {
   assert.equal(d.condition, null, '«مدل صفر دو» یعنی ۱۴۰۲ نه صفر کیلومتر');
 
   const e = parseQuery('سمند ال ایکس مدل ۴۰۲', NOW);
-  assert.equal(e.carText, 'سمند ال ایکس');
+  assert.equal(e.carText, 'سمند lx'); // «ال ایکس» کد LX است (در تطبیق هر دو شکل یکی‌اند)
   assert.equal(e.year.value, 1402);
 });
 

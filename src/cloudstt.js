@@ -21,6 +21,7 @@
 // کلید و نشانی کامل هیچ‌جا (پاسخ‌ها، صفحهٔ وضعیت، گزارش‌ها) نشان داده نمی‌شود؛ فقط نام میزبان.
 
 import { carScore } from './vocab.js';
+import { CATALOG_NAMES } from './catalog.js';
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 // پس از این تعداد خطای پشت‌سرهم، تا مدتی مستقیم سراغ whisper خود سرور می‌رود تا هر بار منتظر خطا نماند
@@ -205,7 +206,8 @@ The speaker uses an Iranian car-price app. They usually say a car's brand, model
 Rules:
 - Write exactly what was said, in Persian script, on one line. Do not answer the question, translate, add, guess or explain anything.
 - Write numbers with Persian digits: «دویست و شش» → ۲۰۶، «نود و هشت» → ۹۸، «هزار و چهارصد» → ۱۴۰۰، «تیپ دو» → تیپ ۲.
-- Spell car names the standard Iranian way. Common names: ${CAR_NAMES.join('، ')}.
+- Spell car names the standard Iranian way. Common names: ${[...new Set([...CAR_NAMES, ...CATALOG_NAMES])].join('، ')}.
+- Model codes are spoken letter by letter («سی اس پنجاه و پنج», «جی اس», «تی هشت», «سیصد و بیست آی»); write them in Latin like the list (CS55, GS, T8, 320i).
 - If there is no clear speech in the audio, output nothing at all.`;
 
 // گفت‌وگو: اول با «بدون فکر کردن» (سریع‌تر برای مدل‌هایی مثل Gemini 2.5 Flash)؛ اگر نپذیرفت، ساده‌تر

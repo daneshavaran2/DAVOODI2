@@ -5,6 +5,7 @@
 
 import { isNum, levenshtein, phonetic } from './match.js';
 import { isNumberWord, normalize, STOPWORDS } from './text.js';
+import { CATALOG_SNAP_WORDS, CATALOG_WORDS, COLOR_PHRASES } from './catalog.js';
 
 // نام سازنده‌ها، خودروها و تیپ‌های رایج بازار ایران (املای معمول)
 const CAR_NAMES = `
@@ -29,16 +30,18 @@ const QUERY_WORDS = `
 const SHORT_CAR_NAMES = 'جک کیا دنا بنز ریو ام وی کی سی بی جی ال اس تی';
 
 const words = (s) => [...new Set(normalize(s).split(' ').filter((w) => w.length >= 3 && !/[a-z0-9]/.test(w)))];
-const CAR = words(CAR_NAMES);
-const CAR_SET = new Set([...CAR, ...normalize(SHORT_CAR_NAMES).split(' ')]);
-const QUERY = new Set(normalize(QUERY_WORDS).split(' ').filter(Boolean));
+// به‌اضافهٔ نام برندها و مدل‌های بانک اطلاعاتی (رسپکت، شوال، آزکارا، تانلند، کلوت، ونوسیا، …)
+const CAR = [...new Set([...words(CAR_NAMES), ...CATALOG_SNAP_WORDS.map(normalize)])];
+const CAR_SET = new Set([...CAR, ...normalize(SHORT_CAR_NAMES).split(' '), ...CATALOG_WORDS.map(normalize)]);
+const QUERY = new Set([...normalize(QUERY_WORDS).split(' '), ...COLOR_PHRASES.flatMap((c) => normalize(c).split(' '))].filter(Boolean));
 const KEY = new Map(CAR.map((w) => [w, phonetic(w)]));
 
 // برای پرامپت مدل‌های ابری (بدون عدد؛ عدد در پرامپت باعث می‌شد مدل عددهای اشتباه بنویسد)
 export const CLOUD_PROMPT =
   'قیمت خودرو: پژو پارس، پراید، سمند سورن، دنا پلاس، تیبا، ساینا، کوییک، شاهین، تارا، رانا، آریسان، ' +
   'هایما، چری تیگو، آریزو، فونیکس، فیدلیتی، دیگنیتی، جک، کیا سراتو، اسپورتیج، تویوتا کمری، هیوندای توسان، النترا، ' +
-  'سوناتا، رنو تندر، مزدا، نیسان، زامیاد، بنز، لکسوس، مدل، کارکرد.';
+  'سوناتا، رنو تندر، مزدا، نیسان، زامیاد، بنز، لکسوس، بهمن رسپکت، فونیکس، کی ام سی، چانگان، هاوال، بی وای دی، ' +
+  'ام وی ام، جیلی، لاماری، مکسوس، بی ام و، مدل، کارکرد.';
 
 const known = (t) => isNum(t) || /[a-z]/.test(t) || STOPWORDS.has(t) || QUERY.has(t) || isNumberWord(t) || t === 'و';
 

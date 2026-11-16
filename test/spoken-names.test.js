@@ -31,6 +31,17 @@ const vehicles = [
   V('peugeot', 'پژو', 'peugeot'),
   V('peugeot,206ir', 'پژو 206', 'peugeot 206'),
   V('peugeot,2008', 'پژو 2008', 'peugeot 2008'),
+  V('changan', 'چانگان', 'changan'),
+  V('changan,cs35', 'چانگان CS35', 'cs35'),
+  V('changan,cs55', 'چانگان CS55', 'cs55'),
+  V('changan,cs55plus', 'چانگان CS55 پلاس', 'cs55 plus'),
+  V('kmc', 'کی‌ام‌سی', 'kmc'),
+  V('kmc,t8', 'کی‌ام‌سی T8', 'kmc t8'),
+  V('kmc,j7', 'کی‌ام‌سی J7', 'kmc j7'),
+  V('honda', 'هوندا', 'honda'),
+  V('honda,hrv', 'هوندا HR-V', 'hr-v'),
+  V('bahman', 'بهمن', 'bahman'),
+  V('bahman,respect', 'بهمن رسپکت', 'respect'),
 ];
 
 const cases = [
@@ -48,6 +59,13 @@ const cases = [
   ['تیگو سون پرو مدل ۱۴۰۲', 'chery,tiggo7pro', { year: 1402 }],
   ['پژو ۲۰۰۸', 'peugeot,2008', { year: null }],
   ['پژو ۲۰۶ مدل ۹۸ کارکرد ۵۰ هزار کیلومتر دو لکه رنگ', 'peugeot,206ir', { year: 1398, km: 50000 }],
+  // نام‌ها و کدهای بانک اطلاعاتی
+  ['چانگان سی اس پنجاه و پنج پلاس ۱۴۰۲', 'changan,cs55plus', { year: 1402 }],
+  ['سی اس سی و پنج', 'changan,cs35'],
+  ['کی ام سی تی هشت', 'kmc,t8'],
+  ['کی ام سی جی هفت مشکی متالیک', 'kmc,j7'],
+  ['هوندا اچ آر وی ۲۰۱۸', 'honda,hrv', { year: 2018 }],
+  ['بهمن رسپکد', 'bahman,respect'],
 ];
 
 for (const [q, want, extra = {}] of cases) {

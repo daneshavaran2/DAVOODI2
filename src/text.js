@@ -1,6 +1,8 @@
 // پردازش متن فارسی: یکسان‌سازی حروف و ارقام، تبدیل عدد نوشتاری به رقم،
 // و جدا کردن «نام خودرو»، «سال ساخت» و «صفر/کارکرده» از جملهٔ کاربر.
 
+import { brandsIn, COLOR_PHRASES, joinSpokenCodes, letterOptions, protectLetterBrands } from './catalog.js';
+
 const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
 const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 
@@ -32,6 +34,7 @@ export function normalize(s) {
     .replace(/[ً-ٰٟـ]/g, '') // اعراب و کشیده
     .replace(/[‌‍‎‏ ]/g, ' ') // نیم‌فاصله و نویسه‌های جهت
     .replace(/(\d)[,٬،٬](?=\d{3}(\D|$))/g, '$1') // جداکنندهٔ هزارگان
+    .replace(/([a-z])[-_](?=[a-z0-9])|(\d)[-_](?=[a-z])/gi, '$1$2') // کد مدل با خط تیره: «HR-V» ← hrv، «X-Trail» ← xtrail
     .replace(/[،,؛;:!?؟.()[\]{}"'«»/\\|_*+=~`<>-]+/g, ' ')
     // «پژو206» ← «پژو 206»؛ ولی کدهای لاتین مثل V8، TU5 و L90 یک کلمه می‌مانند
     .replace(/([؀-ۿ])(\d)/g, '$1 $2')
@@ -320,13 +323,18 @@ const CONDITION_PHRASES = new RegExp(
 const CONDITION_WORDS = new Set([
   'رنگ', 'رنگی', 'شده', 'سالم', 'تمیز', 'بیمه', 'کارکرد', 'کارکردش', 'کیلومتر', 'سفید', 'مشکی', 'نقره', 'نقره‌ای',
   'خاکستری', 'آبی', 'قرمز', 'سبز', 'بژ', 'مدادی', 'زرشکی', 'کرم', 'قهوه', 'دلفینی', 'یشمی', 'طوسی', 'سرمه',
+  // رنگ‌های تک‌کلمه‌ای بانک اطلاعاتی (تیتانیوم، ناردوگری، مسی، …)
+  ...COLOR_PHRASES.filter((c) => !c.includes(' ')),
 ]);
+// رنگ‌های چندکلمه‌ای بانک اطلاعاتی («مشکی متالیک»، «طوسی روشن»، «قهوه ای تیره»)
+const COLOR_RE = new RegExp(`(^| )(?:${COLOR_PHRASES.filter((c) => c.includes(' ')).join('|')})(?= |$)`, 'g');
 
 /** «کارکرد ۱۰۰۰۰۰»، «۵۰۰۰۰ کیلومتر» ← { km, rest } (ورودی با رقم؛ «۱۵۰ کیلو وات» کارکرد نیست) */
 function extractKm(text) {
   const m =
     text.match(/(^| )(?:کارکرد|کارکردش|کار کرد) (\d+)(?: (?:کیلومتر|km))?(?= |$)/) ||
     text.match(/(^| )(\d+) (?:کیلومتر|km)(?: کارکرد)?(?= |$)/) ||
+    text.match(/(^| )(\d{4,}) کارکرد(?= |$)/) ||
     text.match(/(^| )(\d+) کیلو(?! وات)(?: کارکرد)?(?= |$)/);
   if (!m) return { km: null, rest: text };
   return { km: Number(m[2]), rest: (text.slice(0, m.index) + ' ' + text.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim() };
@@ -352,18 +360,35 @@ export function parseQuery(raw, now = new Date()) {
     .join(' ');
   // «بی ام و» (BMW): «و» این‌جا حرف ربط نیست؛ یک کلمه می‌شود تا حذف نشود (در تطبیق ← bmw)
   text = text.replace(/(^| )(?:بی|ب) ام (?:و|دبلیو|دابلیو|وی)(?= |$)/g, '$1بی‌ام‌و');
+  // برندهای حرفی («ام جی»، «کی ام سی»، «بی وای دی»، …) یک نام می‌شوند تا حروفشان جزو کد مدل حساب نشود
+  text = protectLetterBrands(text);
   // «بنز سی ۲۰۰»، «سیتروئن سی ۳»: «سی» حرف C است، نه عدد ۳۰
   text = text.replace(/(^| )(بنز|مرسدس|سیتروئن|سیتروین) سی(?= |$)/g, '$1$2 c').replace(/(^| )سی (\d+)(?= |$)/g, '$1c $2');
-  // «ایکس وان»، «اس فایو»، «تیگو سون»: عدد انگلیسیِ گفته‌شده
+  // «سی اس پنجاه و پنج»، «سی اچ آر»، «سی دویست»: پیش از نام حرف دیگر، یا عددی که بعد از ۳۰ نمی‌آید، «سی» حرف C است
   text = text
     .split(' ')
-    .map((t, i, a) => (i > 0 && t in EN_NUMBERS && MODEL_PREFIX.test(a[i - 1]) ? String(EN_NUMBERS[t]) : t))
+    .map((t, i, a) => {
+      if (t !== 'سی' || i + 1 >= a.length) return t;
+      if (a[i - 1] === 'و' && (wordValue(a[i - 2] || '') || /^\d+$/.test(a[i - 2] || ''))) return t; // «هفتصد و سی»
+      if (wordValue(t + a[i + 1])) return t; // «سی صد» = سیصد
+      const next = wordValue(a[i + 1]);
+      return letterOptions(a[i + 1]) || (next && next.rank >= 2 && next.rank <= 4) ? 'c' : t;
+    })
+    .join(' ');
+  // «ایکس وان»، «اس فایو»، «تیگو سون»: عدد انگلیسیِ گفته‌شده بعد از حرف یا نام مدل
+  text = text
+    .split(' ')
+    .map((t, i, a) => (i > 0 && t in EN_NUMBERS && (MODEL_PREFIX.test(a[i - 1]) || letterOptions(a[i - 1])) ? String(EN_NUMBERS[t]) : t))
     .join(' ');
   // «یک» در «قیمت یک پژو» حرف تعریف است، نه عدد
   text = text.replace(/(^| )(قیمت|یه|برای|از) یک /g, '$1$2 ').replace(/^یک /, '');
   // «۱۰۰ هزار» (رقم و بعد «هزار») ← 100000؛ پیش از تبدیل کلمه‌ها، که «هزار» تنها را ۱۰۰۰ می‌کند
   text = text.replace(/(^| )(\d+) هزار(?= |$)/g, (_, a, d) => `${a}${Number(d) * 1000}`);
   text = wordsToDigits(text);
+  // «جی صفر یک» ← «جی 01»
+  text = text.replace(/(^| )([^ ]+) (?:صفر|0) (\d)(?= |$)/g, (m, a, prev, d) => (letterOptions(prev) ? `${a}${prev} 0${d}` : m));
+  // حروف و عددی که با هم کد یک مدل از فهرست‌اند: «سی اس 55» ← cs55، «جی اس» ← gs، «320 آی» ← 320i، «تی 8» ← t8
+  text = joinSpokenCodes(text.split(' '), brandsIn(text)).join(' ');
   // حرف لاتین و عدد پشت‌سرهم یک نام مدل است: «c 200» ← c200 (مثل نام سایت‌ها)
   text = text.replace(/(^| )([a-z]) (\d+)(?= |$)/g, '$1$2$3');
   // «مدل صفر دو» یعنی ۱۴۰۲، نه «صفر کیلومتر»
@@ -375,7 +400,7 @@ export function parseQuery(raw, now = new Date()) {
   text = text.replace(USED_WORDS, ' ').replace(NEW_WORDS, ' ').replace(/\s+/g, ' ').trim();
   const kmPart = extractKm(text);
   const km = kmPart.km;
-  text = kmPart.rest.replace(CONDITION_PHRASES, ' ').replace(/\s+/g, ' ').trim();
+  text = kmPart.rest.replace(CONDITION_PHRASES, ' ').replace(COLOR_RE, ' ').replace(/\s+/g, ' ').trim();
 
   const { year, rest } = extractYear(text, now);
   let carRest = rest;

@@ -4,3 +4,8 @@ node_modules/
 .DS_Store
 screenshots/
 whisper/
+
+# بانک اطلاعاتی (رکوردهای خودرو، شمارهٔ شاسی و قیمت) در مخزن نمی‌آید؛ فقط src/data/car-catalog.js
+*.xlsx
+*.xls
+*.csv
