@@ -76,6 +76,17 @@ const best = (t, pool) => pool.reduce((m, c) => Math.max(m, tokenSim(t, c)), 0);
  * امتیاز یک نام نامزد برای کلمه‌های پرسش.
  * titleTok: کلمه‌های نام نامزد. extraTok: کلمه‌های کمکی (مترادف‌ها) که فقط برای پوشش پرسش حساب می‌شوند.
  */
+// مشخصه‌های فنی و وضعیت: در امتیاز حساب می‌شوند (تیپ «۸ سیلندر» را بهتر کنند) ولی به‌تنهایی خودرویی را انتخاب نمی‌کنند.
+// «لند کروز ۸ سیلندر» نباید «کیا موهاوی ۸ سیلندر» شود فقط چون «۸ سیلندر» در نامش هست.
+const SPEC_WORDS = new Set([
+  'سیلندر', 'دنده', 'توربو', 'اتوماتیک', 'اتومات', 'دستی', 'هیبرید', 'هایبرید', 'برقی', 'دوگانه', 'سوز', 'گازسوز',
+  'بنزینی', 'دیزلی', 'اسپرت', 'فول', 'لیتر', 'لیتری', 'cc', 'اسب', 'بخار', 'دیفرانسیل', '4x4',
+]);
+/** کدام کلمه‌های پرسش مشخصهٔ فنی‌اند (عددِ پیش از مشخصه هم: «8 سیلندر»، «6 دنده») */
+function specMask(qTok) {
+  return qTok.map((t, i) => SPEC_WORDS.has(t) || (isNum(t) && SPEC_WORDS.has(qTok[i + 1] || '')));
+}
+
 export function scoreCandidate(qTok, titleTok, extraTok = []) {
   if (!qTok.length || !titleTok.length) return null;
   // عددی که در نام نامزد هست ولی در پرسش نیست، یعنی مدل دیگری است (207 به جای 206)
@@ -84,6 +95,19 @@ export function scoreCandidate(qTok, titleTok, extraTok = []) {
   let mt = 0;
   for (const c of titleTok) mt += best(c, qTok);
   const pool = extraTok.length ? titleTok.concat(extraTok) : titleTok;
+  const spec = specMask(qTok);
+  const core = qTok.filter((_, i) => !spec[i]);
+  // پرسش فقط مشخصهٔ فنی است («۸ سیلندر اتوماتیک»): خودرویی انتخاب نمی‌شود
+  if (!core.length) return null;
+  // نامزد باید در «نام» با پرسش شریک باشد، نه فقط در مشخصهٔ فنی:
+  //   یک کلمهٔ نام (نزدیک)، یا عدد مدل (۲۰۶، ۱۳۱؛ نه ۸ در «۸ سیلندر»)، یا کلمه‌ای یک‌حرف‌متفاوت («پاس»/«پارس») به‌همراه مشخصه
+  const names = core.filter((t) => !isNum(t));
+  if (names.length && !names.some((q) => best(q, pool) >= 0.7)) {
+    const numHit = core.some((q) => isNum(q) && titleTok.includes(q));
+    const weak = names.some((q) => q.length >= 3 && pool.some((t) => !isNum(t) && t.length >= 3 && levenshtein(q, t) === 1));
+    const specHit = qTok.some((q, i) => spec[i] && !isNum(q) && best(q, pool) >= 0.7);
+    if (!numHit && !(weak && specHit)) return null;
+  }
   let qm = 0;
   for (const q of qTok) qm += best(q, pool);
   if (qm === 0) return null;
@@ -97,9 +121,11 @@ export function scoreCandidate(qTok, titleTok, extraTok = []) {
   let score = qm * 2 + precision * 3 + mt * 0.5;
   const qNums = qTok.filter(isNum);
   if (qNums.length && !titleTok.some(isNum) && !extraTok.some((t) => qNums.includes(t))) score -= 3;
-  // همهٔ کلمه‌های گفته‌شده در نام هست («سورن» برای «سمند سورن») یا نام بیشترش در پرسش آمده
-  const coversQuery = qTok.every((q) => best(q, pool) >= 0.7);
-  if (precision < 0.5 && qm < 2 && !coversQuery) return null;
+  // همهٔ کلمه‌های گفته‌شده (جز مشخصه‌های فنی) در نام هست («سورن» برای «سمند سورن») یا نام بیشترش در پرسش آمده
+  const must = core.length ? core : qTok;
+  const coversQuery = must.every((q) => best(q, pool) >= 0.7);
+  const qmCore = must.reduce((sum, q) => sum + best(q, pool), 0);
+  if (precision < 0.5 && qmCore < 2 && !coversQuery) return null;
   return { score, precision, qm, mt };
 }
 
@@ -112,7 +138,7 @@ export function joinVariants(qTok) {
   for (let i = 0; i + 1 < qTok.length; i++) {
     const a = qTok[i];
     const b = qTok[i + 1];
-    if (isNum(a) || isNum(b) || a.length + b.length < 4) continue;
+    if (isNum(a) || isNum(b) || a.length + b.length < 4 || SPEC_WORDS.has(a) || SPEC_WORDS.has(b)) continue;
     out.push([...qTok.slice(0, i), a + b, ...qTok.slice(i + 2)]);
   }
   return out;

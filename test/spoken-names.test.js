@@ -42,6 +42,12 @@ const vehicles = [
   V('honda,hrv', 'هوندا HR-V', 'hr-v'),
   V('bahman', 'بهمن', 'bahman'),
   V('bahman,respect', 'بهمن رسپکت', 'respect'),
+  V('kia', 'کیا', 'kia'),
+  V('kia,mohave', 'کیا موهاوی', 'mohave'),
+  V('kia,mohave,v8', 'کیا موهاوی 8 سیلندر', 'mohave'),
+  V('toyota', 'تویوتا', 'toyota'),
+  V('toyota,landcruiser', 'تویوتا لندکروزر', 'land cruiser'),
+  V('toyota,camry', 'تویوتا کمری', 'camry'),
 ];
 
 const cases = [
@@ -66,6 +72,11 @@ const cases = [
   ['کی ام سی جی هفت مشکی متالیک', 'kmc,j7'],
   ['هوندا اچ آر وی ۲۰۱۸', 'honda,hrv', { year: 2018 }],
   ['بهمن رسپکد', 'bahman,respect'],
+  // «۸ سیلندر» مشخصه است: خودرویی که فقط همین را دارد (کیا موهاوی ۸ سیلندر) نباید جای «لند کروز» انتخاب شود
+  ['لند کروز ۲۰۰۶ ۸ سیلندر ماشین بدون رنگ دست اول', 'toyota,landcruiser', { year: 2006 }],
+  ['لند کروزر ۸ سیلندر', 'toyota,landcruiser'],
+  ['موهاوی ۸ سیلندر', 'kia,mohave,v8'],
+  ['کیا موهاوی', 'kia,mohave'],
 ];
 
 for (const [q, want, extra = {}] of cases) {
@@ -78,6 +89,14 @@ for (const [q, want, extra = {}] of cases) {
     if ('km' in extra) assert.equal(p.km, extra.km);
   });
 }
+
+test('اگر هیچ کلمه‌ای از نام در فهرست نیست، خودرویی که فقط در مشخصهٔ فنی شریک است انتخاب نمی‌شود', () => {
+  for (const q of ['لامبورگینی ۸ سیلندر', 'قیمت ماشین ۸ سیلندر اتوماتیک', 'فراری توربو دنده ای']) {
+    const v = resolveVehicle(vehicles, parseQuery(q).carText);
+    assert.ok(!v || !['kia,mohave,v8', 'kia,mohave'].includes(v.value), `${q} ← ${v?.value}`);
+  }
+  assert.equal(resolveVehicle(vehicles, parseQuery('لامبورگینی ۸ سیلندر').carText), null);
+});
 
 test('کارکرد و رنگ جزو نام خودرو نیستند؛ «۱۵۰ کیلو وات» کارکرد نیست', () => {
   assert.equal(parseQuery('تویوتا کمری 2015 بی رنگ').carText, 'تویوتا کمری');
