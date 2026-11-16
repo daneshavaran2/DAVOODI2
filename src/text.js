@@ -225,11 +225,13 @@ export function extractYear(text, now = new Date()) {
       if (y) return { year: y, rest: [...tok.slice(0, i), ...tok.slice(i + 1)].join(' ') };
     }
   }
-  // سال میلادی (برای خودروهای وارداتی) فقط در انتهای جمله و نه بعد از «پژو» (پژو 2008)
+  // سال میلادی (برای خودروهای وارداتی) در هر جای جمله، ولی نه بعد از «پژو» (پژو 2008، 3008، 5008)
   const last = tok.length - 1;
-  if (last > 0 && /^(19[5-9]\d|20[0-4]\d)$/.test(tok[last]) && !/^(پژو|peugeot)$/.test(tok[last - 1])) {
-    const y = toYear(tok[last], now);
-    if (y) return { year: y, rest: tok.slice(0, last).join(' ') };
+  for (let i = last; i > 0; i--) {
+    if (/^(19[5-9]\d|20[0-4]\d)$/.test(tok[i]) && !/^(پژو|peugeot)$/.test(tok[i - 1])) {
+      const y = toYear(tok[i], now);
+      if (y) return { year: y, rest: [...tok.slice(0, i), ...tok.slice(i + 1)].join(' ') };
+    }
   }
   // «پراید ۹۸»، «پارس دوگانه سوز ۹۶»: عدد دورقمی آخر جمله (۵۰ تا ۹۹ یا ۰۰ تا امسال) معمولاً سال است؛
   // ولی نه وقتی بخشی از نام مدل است («ال ۹۰»، «تیپ ۵»، «x 22»، «تیگو ۷»).
@@ -302,8 +304,33 @@ const ALIASES = {
   quick: 'کوییک', shahin: 'شاهین', tara: 'تارا', rana: 'رانا', runna: 'رانا', haima: 'هایما', chery: 'چری',
   tiggo: 'تیگو', toyota: 'تویوتا', camry: 'کمری', corolla: 'کرولا', kia: 'کیا', cerato: 'سراتو',
   sportage: 'اسپورتیج', hyundai: 'هیوندای', renault: 'رنو', nissan: 'نیسان', mazda: 'مزدا', jac: 'جک',
-  plus: 'پلاس', pars: 'پارس', persia: 'پرشیا', soren: 'سورن', sarir: 'سریر',
+  plus: 'پلاس', pars: 'پارس', persia: 'پرشیا', soren: 'سورن', sarir: 'سریر', bmw: 'بی‌ام‌و', benz: 'بنز',
 };
+
+// عدد انگلیسیِ گفته‌شده بعد از حرف یا نام مدل: «ایکس وان» ← X1، «جک اس فایو» ← S5، «تیگو سون» ← تیگو 7
+const EN_NUMBERS = { وان: 1, تو: 2, تری: 3, ثری: 3, فور: 4, فایو: 5, فایف: 5, سیکس: 6, سون: 7, ایت: 8, ناین: 9, تن: 10 };
+const MODEL_PREFIX = /^(ایکس|x|اس|s|ال|l|وی|v|کیو|q|جی|g|تی|t|اچ|h|ای|e|سی|c|ام|m|دی|d|آر|ار|r|زد|z|تیگو|آریزو|اریزو|tiggo|arrizo)$/;
+
+// وضعیت و ویژگی‌هایی که جزو نام خودرو نیستند («بدون رنگ»، «سفید»، «کارکرد ۱۰۰ هزار»)؛ از نام حذف می‌شوند
+const CONDITION_PHRASES = new RegExp(
+  '(^| )(?:(?:بدون|بی) (?:رنگ|تصادف|خط و خش|خط|خش|ضربه)|(?:\\d+ )?(?:لکه|لک|جا) رنگ|رنگ شده|در حد صفر|فنی سالم|' +
+    'نقره ای|قهوه ای|سرمه ای|نوک مدادی|دودی|کم کارکرد)(?= |$)',
+  'g',
+);
+const CONDITION_WORDS = new Set([
+  'رنگ', 'رنگی', 'شده', 'سالم', 'تمیز', 'بیمه', 'کارکرد', 'کارکردش', 'کیلومتر', 'سفید', 'مشکی', 'نقره', 'نقره‌ای',
+  'خاکستری', 'آبی', 'قرمز', 'سبز', 'بژ', 'مدادی', 'زرشکی', 'کرم', 'قهوه', 'دلفینی', 'یشمی', 'طوسی', 'سرمه',
+]);
+
+/** «کارکرد ۱۰۰۰۰۰»، «۵۰۰۰۰ کیلومتر» ← { km, rest } (ورودی با رقم؛ «۱۵۰ کیلو وات» کارکرد نیست) */
+function extractKm(text) {
+  const m =
+    text.match(/(^| )(?:کارکرد|کارکردش|کار کرد) (\d+)(?: (?:کیلومتر|km))?(?= |$)/) ||
+    text.match(/(^| )(\d+) (?:کیلومتر|km)(?: کارکرد)?(?= |$)/) ||
+    text.match(/(^| )(\d+) کیلو(?! وات)(?: کارکرد)?(?= |$)/);
+  if (!m) return { km: null, rest: text };
+  return { km: Number(m[2]), rest: (text.slice(0, m.index) + ' ' + text.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim() };
+}
 
 const NEW_RE ='(^| )(کارکرد صفر|صفر کیلومتر|صفر|نو|آکبند|اکبند)(?= |$)';
 const USED_RE = '(^| )(کارکرده|کار کرده|دست دوم|دسته دوم|دست 2)(?= |$)';
@@ -323,9 +350,22 @@ export function parseQuery(raw, now = new Date()) {
     .split(' ')
     .map((t) => ALIASES[t] || t)
     .join(' ');
+  // «بی ام و» (BMW): «و» این‌جا حرف ربط نیست؛ یک کلمه می‌شود تا حذف نشود (در تطبیق ← bmw)
+  text = text.replace(/(^| )(?:بی|ب) ام (?:و|دبلیو|دابلیو|وی)(?= |$)/g, '$1بی‌ام‌و');
+  // «بنز سی ۲۰۰»، «سیتروئن سی ۳»: «سی» حرف C است، نه عدد ۳۰
+  text = text.replace(/(^| )(بنز|مرسدس|سیتروئن|سیتروین) سی(?= |$)/g, '$1$2 c').replace(/(^| )سی (\d+)(?= |$)/g, '$1c $2');
+  // «ایکس وان»، «اس فایو»، «تیگو سون»: عدد انگلیسیِ گفته‌شده
+  text = text
+    .split(' ')
+    .map((t, i, a) => (i > 0 && t in EN_NUMBERS && MODEL_PREFIX.test(a[i - 1]) ? String(EN_NUMBERS[t]) : t))
+    .join(' ');
   // «یک» در «قیمت یک پژو» حرف تعریف است، نه عدد
   text = text.replace(/(^| )(قیمت|یه|برای|از) یک /g, '$1$2 ').replace(/^یک /, '');
+  // «۱۰۰ هزار» (رقم و بعد «هزار») ← 100000؛ پیش از تبدیل کلمه‌ها، که «هزار» تنها را ۱۰۰۰ می‌کند
+  text = text.replace(/(^| )(\d+) هزار(?= |$)/g, (_, a, d) => `${a}${Number(d) * 1000}`);
   text = wordsToDigits(text);
+  // حرف لاتین و عدد پشت‌سرهم یک نام مدل است: «c 200» ← c200 (مثل نام سایت‌ها)
+  text = text.replace(/(^| )([a-z]) (\d+)(?= |$)/g, '$1$2$3');
   // «مدل صفر دو» یعنی ۱۴۰۲، نه «صفر کیلومتر»
   text = text.replace(/(^| )(مدل|سال|ساخت|تولید) (?:صفر|0) (\d)(?= |$)/g, '$1$2 0$3');
 
@@ -333,6 +373,9 @@ export function parseQuery(raw, now = new Date()) {
   if (IS_USED.test(text)) condition = 'used';
   else if (IS_NEW.test(text)) condition = 'new';
   text = text.replace(USED_WORDS, ' ').replace(NEW_WORDS, ' ').replace(/\s+/g, ' ').trim();
+  const kmPart = extractKm(text);
+  const km = kmPart.km;
+  text = kmPart.rest.replace(CONDITION_PHRASES, ' ').replace(/\s+/g, ' ').trim();
 
   const { year, rest } = extractYear(text, now);
   let carRest = rest;
@@ -348,8 +391,8 @@ export function parseQuery(raw, now = new Date()) {
   }
   const carText = carRest
     .split(' ')
-    .filter((t) => t && !STOPWORDS.has(t))
+    .filter((t) => t && !STOPWORDS.has(t) && !CONDITION_WORDS.has(t))
     .join(' ');
 
-  return { raw: String(raw ?? ''), normalized: text, carText, year, yearUnclear, condition };
+  return { raw: String(raw ?? ''), normalized: text, carText, year, yearUnclear, condition, km };
 }
