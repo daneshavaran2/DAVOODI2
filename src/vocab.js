@@ -55,7 +55,11 @@ function nearestCar(t) {
   for (const c of CAR) {
     let sim = 0;
     if (c.length >= 4 && KEY.get(c) === k && k.length >= 2) sim = 0.9;
-    else if (c.length >= 4 && 1 - levenshtein(t, c) / Math.max(t.length, c.length) >= 0.75) sim = 0.8;
+    else if (c.length >= 4) {
+      const d = levenshtein(t, c);
+      const n = Math.max(t.length, c.length);
+      if (d <= (n >= 9 ? 2 : 1) && 1 - d / n >= 0.75) sim = 0.8;
+    }
     if (sim > bestSim) [best, bestSim, tie] = [c, sim, false];
     else if (sim && sim === bestSim && c !== best) tie = true;
   }

@@ -132,12 +132,26 @@ export function brandsIn(text) {
   return new Set(BRAND_NORM.filter(([, n]) => t.includes(` ${n} `)).map(([b]) => b));
 }
 
-/** برندهای حرفی یک نام می‌شوند (با نیم‌فاصله) تا حروفشان جزو کد مدل حساب نشود */
+// نام‌های چندکلمه‌ای فهرست که کلمه‌ای شبیه عدد یا حرف دارند («سی لاین»، «سوپر بی»، «تی راک»): یک نام می‌مانند تا
+// «سی» عدد ۳۰ یا «بی» حرف B حساب نشود
+const NUMBERISH = new Set('یک دو سه چهار پنج شش هفت هشت نه ده سی صد'.split(' '));
+const PROTECTED_NAMES = [
+  ...new Set(
+    MODELS.map(([, m]) => norm(m).replace(/[-_]/g, ' ').replace(/\s+/g, ' '))
+      .filter((m) => {
+        const t = m.split(' ');
+        return t.length > 1 && t.every((w) => !/[a-z0-9+]/.test(w)) && t.some((w) => NUMBERISH.has(w) || LETTER_NAMES[w]);
+      }),
+  ),
+];
+
+/** برندهای حرفی و نام‌های عددمانند یک نام می‌شوند (با نیم‌فاصله) تا حروفشان کد مدل یا عدد حساب نشود */
 export function protectLetterBrands(text) {
   let t = ` ${text} `;
-  for (const b of LETTER_BRANDS) t = t.split(` ${b} `).join(` ${b.split(' ').join(ZWNJ)} `);
+  for (const b of [...LETTER_BRANDS, ...PROTECTED_NAMES]) t = t.split(` ${b} `).join(` ${b.split(' ').join(ZWNJ)} `);
   return t.trim();
 }
+export const _protectedNames = () => PROTECTED_NAMES;
 
 // ---------------------------------------------------------------- واژه‌ها
 

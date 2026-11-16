@@ -59,8 +59,11 @@ export function tokenSim(a, b) {
   if (isNum(a) || isNum(b)) return 0;
   if (a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a))) return 0.85;
   if (Math.min(a.length, b.length) >= 4) {
-    const r = 1 - levenshtein(a, b) / Math.max(a.length, b.length);
-    if (r >= 0.75) return 0.7;
+    // یک حرف تفاوت (هیوندا/هیوندای، سرادو/سراتو)؛ دو حرف فقط برای کلمه‌های بلند. «لندکروزر» و «لندرور» دو حرف
+    // فرق دارند و دو خودروی دیگرند.
+    const d = levenshtein(a, b);
+    const n = Math.max(a.length, b.length);
+    if (d <= (n >= 9 ? 2 : 1) && 1 - d / n >= 0.75) return 0.7;
   }
   if (Math.min(a.length, b.length) >= 3) {
     const pa = phonetic(a);
@@ -124,6 +127,9 @@ export function scoreCandidate(qTok, titleTok, extraTok = []) {
   // همهٔ کلمه‌های گفته‌شده (جز مشخصه‌های فنی) در نام هست («سورن» برای «سمند سورن») یا نام بیشترش در پرسش آمده
   const must = core.length ? core : qTok;
   const coversQuery = must.every((q) => best(q, pool) >= 0.7);
+  // هر کلمهٔ نامِ گفته‌شده که در نامزد نیست امتیاز را کم می‌کند: «لند کروزر» ← «لندکروزر» (همه را دارد)، نه «لندرور»
+  // (که «کروزر» را ندارد)
+  score -= must.filter((q) => !isNum(q) && best(q, pool) < 0.7).length * 1.5;
   const qmCore = must.reduce((sum, q) => sum + best(q, pool), 0);
   if (precision < 0.5 && qmCore < 2 && !coversQuery) return null;
   return { score, precision, qm, mt };
@@ -138,7 +144,9 @@ export function joinVariants(qTok) {
   for (let i = 0; i + 1 < qTok.length; i++) {
     const a = qTok[i];
     const b = qTok[i + 1];
-    if (isNum(a) || isNum(b) || a.length + b.length < 4 || SPEC_WORDS.has(a) || SPEC_WORDS.has(b)) continue;
+    // کد مدل جدا نوشته‌شده: «x 22» ← x22، «18 s» ← 18s، «i 30» ← i30 (گفته به شکل سرهم تبدیل می‌شود)
+    const code = (/^[a-z]{1,4}$/.test(a) && isNum(b)) || (isNum(a) && /^[a-z]{1,3}$/.test(b));
+    if (!code && (isNum(a) || isNum(b) || a.length + b.length < 4 || SPEC_WORDS.has(a) || SPEC_WORDS.has(b))) continue;
     out.push([...qTok.slice(0, i), a + b, ...qTok.slice(i + 2)]);
   }
   return out;
@@ -148,10 +156,16 @@ export function joinVariants(qTok) {
 export function pickBest(query, items, getTitle, getExtra = () => '') {
   const qTok = Array.isArray(query) ? query : tokens(query);
   let top = null;
-  for (const variant of joinVariants(qTok)) {
-    for (const item of items) {
-      const s = scoreCandidate(variant, tokens(getTitle(item)), tokens(getExtra(item) || ''));
-      if (s && (!top || s.score > top.score)) top = { item, ...s, query: variant };
+  const variants = joinVariants(qTok);
+  for (const item of items) {
+    const extra = tokens(getExtra(item) || '');
+    // نام سایت هم ممکن است دوتکه نوشته شده باشد («لند کروزر» در برابر «لندکروزر» گفته‌شده)
+    const titles = joinVariants(tokens(getTitle(item)));
+    for (const variant of variants) {
+      for (const title of titles) {
+        const s = scoreCandidate(variant, title, extra);
+        if (s && (!top || s.score > top.score)) top = { item, ...s, query: variant };
+      }
     }
   }
   return top;
