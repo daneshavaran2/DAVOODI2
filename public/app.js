@@ -280,6 +280,10 @@ function showVoiceDebug(wav, info = {}, data, error) {
     ['تبدیل با', data ? `${data.via === 'cloud' ? 'ابری' : data.via === 'server' ? 'whisper-server' : data.via || '—'}${data.model ? ` (${data.model})` : ''}` : '—'],
     ['زمان', data ? `${sec(data.ms)} روی سرور، ${sec(data.totalMs)} کل` : '—'],
   ];
+  for (const c of data?.candidates || []) {
+    const mark = c.model === data.model ? ' ✓ انتخاب شد' : '';
+    rows.push([`  ${c.model}`, c.error ? `خطا: ${c.error}` : `«${c.text ?? ''}»${mark}`]);
+  }
   if (error) rows.push(['خطا', error]);
   box.replaceChildren();
   const title = document.createElement('strong');

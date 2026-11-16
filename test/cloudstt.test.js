@@ -42,6 +42,11 @@ const fake = http.createServer((req, res) => {
     }
     const field = (n) => Buffer.from((body.match(new RegExp(`name="${n}"\\r\\n\\r\\n([^\\r]*)`)) || [])[1] || '', 'latin1').toString('utf8');
     seen.push({ path: req.url, auth: req.headers.authorization, model: field('model'), language: field('language'), prompt: field('prompt'), hasFile: /name="file"; filename="audio.wav"/.test(body) });
+    if (field('model') === 'test/bad-ear') {
+      res.setHeader('content-type', 'application/json');
+      return res.end(JSON.stringify({ text: 'بسیش' }));
+    }
+    if (field('model') === 'test/slow') return setTimeout(() => res.end(JSON.stringify({ text: 'سمند' })), 3000);
     if (field('model') === 'no/such-model') {
       res.statusCode = 404;
       return res.end(JSON.stringify({ error: { message: 'model not found' } }));
@@ -69,6 +74,7 @@ const BASE = `http://127.0.0.1:${fake.address().port}/api/ws-123/v1`;
 
 const { cloudConfig, cloudStatus, cleanChatText, isChatModel, isTranscriptionModel, LIARA_COMPARE_MODELS, _resetCloud } = await import('../src/cloudstt.js');
 const stt = await import('../src/stt.js');
+const { CLOUD_PROMPT } = await import('../src/vocab.js');
 
 function wav(seconds) {
   const n = Math.round(seconds * 16000);
@@ -138,7 +144,7 @@ test('ابری: صدا با کلید، مدل، زبان فارسی و پرام�
     auth: `Bearer ${KEY}`,
     model: 'whisper-1',
     language: 'fa',
-    prompt: stt.DEFAULT_PROMPT,
+    prompt: CLOUD_PROMPT,
     hasFile: true,
   });
   assert.equal(await cliRuns(), before, 'whisper-cli اجرا نشد');
@@ -282,6 +288,41 @@ test('چند مدل: اگر اولی نبود (404) دومی، و اولی تا 
   assert.equal(st.usable, true);
   await stt.transcribe(wav(2));
   assert.equal(seen.length, 3, 'دفعهٔ بعد مستقیم مدل دوم');
+  delete process.env.STT_API_MODEL;
+});
+
+test('دو مدل هم‌زمان: متنی که به پرسش خودرو می‌خورد انتخاب می‌شود، حتی اگر از مدل دوم باشد', async () => {
+  useCloud({ STT_API_MODEL: 'test/bad-ear,google/chirp-3' });
+  seen.length = 0;
+  const r = await stt.transcribe(wav(3));
+  assert.equal(r.via, 'cloud');
+  assert.equal(r.model, 'google/chirp-3');
+  assert.equal(r.text, 'پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰');
+  assert.equal(seen.length, 2, 'هر دو هم‌زمان');
+  assert.deepEqual(
+    r.candidates.map((c) => [c.model, c.text]),
+    [['test/bad-ear', 'بسیش'], ['google/chirp-3', ' پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰.']],
+  );
+  assert.equal(cloudStatus().lastModel, 'google/chirp-3');
+  assert.equal(cloudStatus().ok, 1, 'یک جمله = یک موفق');
+
+  // STT_API_PARALLEL=1: فقط اولی
+  process.env.STT_API_PARALLEL = '1';
+  seen.length = 0;
+  assert.equal((await stt.transcribe(wav(3))).text, 'بسیش');
+  assert.equal(seen.length, 1);
+  delete process.env.STT_API_PARALLEL;
+  delete process.env.STT_API_MODEL;
+});
+
+test('دو مدل هم‌زمان: مدل کند جملهٔ آماده را بیش از ۱٫۵ ثانیه نگه نمی‌دارد', async () => {
+  useCloud({ STT_API_MODEL: 'test/slow,google/chirp-3' });
+  const t0 = Date.now();
+  const r = await stt.transcribe(wav(3));
+  const took = Date.now() - t0;
+  assert.equal(r.model, 'google/chirp-3');
+  assert.ok(took < 2500, `${took}ms`);
+  assert.equal(r.candidates[0].error, 'دیرتر از بقیه');
   delete process.env.STT_API_MODEL;
 });
 

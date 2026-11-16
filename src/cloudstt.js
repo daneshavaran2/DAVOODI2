@@ -14,9 +14,13 @@
 //   STT_API_KEY    کلید سرویس (Bearer)
 //   STT_API_MODEL  یک یا چند شناسهٔ مدل، جداشده با کاما، به ترتیب ترجیح؛ اگر اولی خطا داد بعدی
 //                  (پیش‌فرض برای لیارا openai/whisper-1 و برای بقیه whisper-1)
+//   STT_API_PARALLEL    اختیاری؛ چند مدل اول هم‌زمان (پیش‌فرض ۲؛ ۱ = یکی‌یکی)
+//   STT_API_PROMPT      اختیاری؛ پرامپت مدل‌های تبدیل گفتار (پیش‌فرض: نام خودروهای رایج، بدون عدد)
 //   STT_API_TIMEOUT_MS  اختیاری؛ کل زمان سرویس ابری برای یک جمله، پیش‌فرض ۱۲۰۰۰
 // اگر سرویس ابری خطا بدهد یا دیر کند، همان صدا با whisper روی خود سرور تبدیل می‌شود.
 // کلید و نشانی کامل هیچ‌جا (پاسخ‌ها، صفحهٔ وضعیت، گزارش‌ها) نشان داده نمی‌شود؛ فقط نام میزبان.
+
+import { carScore } from './vocab.js';
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 // پس از این تعداد خطای پشت‌سرهم، تا مدتی مستقیم سراغ whisper خود سرور می‌رود تا هر بار منتظر خطا نماند
@@ -56,7 +60,8 @@ export function cloudConfig(env = process.env) {
     .map((m) => m.trim())
     .filter(Boolean);
   if (!models.length) models.push(fallback);
-  return { base, key, models, model: models[0], host: u.host, timeoutMs: Number(env.STT_API_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS };
+  const parallel = Math.min(4, Math.max(1, Number(env.STT_API_PARALLEL) || 2));
+  return { base, key, models, model: models[0], parallel, host: u.host, timeoutMs: Number(env.STT_API_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS };
 }
 
 const state = { ok: 0, failed: 0, streak: 0, lastError: null, lastErrorAt: null, lastModel: null, pausedUntil: 0 };
@@ -253,36 +258,80 @@ async function viaChat(wav, id, opts, cfg, timeoutMs) {
   }
 }
 
+// چند مدل اول هم‌زمان (STT_API_PARALLEL، پیش‌فرض ۲)؛ پس از رسیدن اولین متن، حداکثر این مدت برای بقیه صبر می‌شود
+const ENSEMBLE_GRACE_MS = 1500;
+
+/** اجرای هم‌زمان چند مدل ← [{ id, text } | { id, error }] (مدلی که هنوز جواب نداده: هیچ‌کدام) */
+function runBatch(wav, ids, opts, cfg, timeoutMs) {
+  const out = ids.map((id) => ({ id }));
+  return new Promise((resolve) => {
+    let pending = ids.length;
+    let grace = null;
+    const finish = () => {
+      clearTimeout(grace);
+      resolve(out.map((r) => ({ ...r })));
+    };
+    ids.forEach((id, i) => {
+      const fn = isChatModel(id) ? viaChat : viaTranscriptions;
+      fn(wav, id, opts, cfg, timeoutMs)
+        .then((text) => {
+          out[i].text = text;
+          if (!grace && pending > 1) grace = setTimeout(finish, ENSEMBLE_GRACE_MS);
+        })
+        .catch((e) => (out[i].error = e))
+        .finally(() => --pending === 0 && finish());
+    });
+  });
+}
+
 /**
- * صدای WAV را به سرویس ابری می‌فرستد. مدل‌ها به ترتیب امتحان می‌شوند؛ مدلی که درخواست را نپذیرفت تا مدتی کنار
- * می‌رود. خروجی { text, model } یا CloudSttError.
+ * صدای WAV را به سرویس ابری می‌فرستد. چند مدل اول هم‌زمان امتحان می‌شوند و متنی که بیشتر به «پرسش قیمت خودرو»
+ * می‌خورد انتخاب می‌شود (اگر یکی «بسیش» شنید و دیگری «پژو پارس»، دومی). اگر همه خطا دادند، مدل‌های بعدی به ترتیب.
+ * مدلی که درخواست را نپذیرفت تا مدتی کنار می‌رود. خروجی { text, model, candidates } یا CloudSttError.
  */
 export async function cloudTranscribe(wav, { prompt = '', language = 'fa' } = {}, cfg = cloudConfig()) {
   if (!cfg) throw new CloudSttError('سرویس ابری تنظیم نشده است.');
+  const opts = { prompt, language };
   const deadline = Date.now() + cfg.timeoutMs;
+  const ready = cfg.models.filter((id) => Date.now() >= modelState(id).skipUntil);
   let last = null;
-  for (const id of cfg.models) {
-    const m = modelState(id);
-    if (Date.now() < m.skipUntil) continue;
+  let i = 0;
+  while (i < ready.length) {
     const left = deadline - Date.now();
     if (last && left < 1000) break; // مدل بعدی فقط اگر هنوز وقت هست
-    try {
-      const fn = isChatModel(id) ? viaChat : viaTranscriptions;
-      const text = await fn(wav, id, { prompt, language }, cfg, left);
-      m.lastError = null;
+    const batch = ready.slice(i, i + (i === 0 ? cfg.parallel : 1));
+    i += batch.length;
+    const outs = await runBatch(wav, batch, opts, cfg, left);
+    for (const r of outs) {
+      if (!r.error) continue;
+      if (!(r.error instanceof ModelError)) throw r.error;
+      const m = modelState(r.id);
+      m.lastError = r.error.message;
+      if (r.error.kind === 'model') m.skipUntil = Date.now() + MODEL_SKIP_MS;
+    }
+    const ok = outs.filter((r) => typeof r.text === 'string');
+    if (ok.length) {
+      // بیشترین شباهت به پرسش خودرو؛ در برابری، ترتیب ترجیح
+      let best = ok[0];
+      let bestScore = carScore(best.text);
+      for (const r of ok.slice(1)) {
+        const sc = carScore(r.text);
+        if (sc > bestScore) [best, bestScore] = [r, sc];
+      }
+      for (const r of ok) modelState(r.id).lastError = null;
       state.ok++;
       state.streak = 0;
       state.pausedUntil = 0;
-      state.lastModel = id;
-      return { text, model: id };
-    } catch (e) {
-      if (!(e instanceof ModelError)) throw e;
-      m.lastError = e.message;
-      if (e.kind === 'fatal' || e.kind === 'timeout') throw fail(e.message, e.pauseMs);
-      if (e.kind === 'model') m.skipUntil = Date.now() + MODEL_SKIP_MS;
-      last = e;
-      if (cfg.models.length > 1) console.error(`تبدیل گفتار ابری: ${e.message} مدل بعدی امتحان می‌شود.`);
+      state.lastModel = best.id;
+      const candidates = outs.map((r) => ({ model: r.id, text: r.text ?? null, error: r.error?.message ?? (r.text === undefined ? 'دیرتر از بقیه' : null) }));
+      return { text: best.text, model: best.id, candidates };
     }
+    const errs = outs.map((r) => r.error);
+    const fatal = errs.find((e) => e.kind === 'fatal');
+    if (fatal) throw fail(fatal.message, fatal.pauseMs);
+    if (errs.every((e) => e.kind === 'timeout')) throw fail(errs[0].message);
+    last = errs.find((e) => e.kind !== 'timeout');
+    if (i < ready.length) console.error(`تبدیل گفتار ابری: ${last.message} مدل بعدی امتحان می‌شود.`);
   }
   const earlier = cfg.models.map((id) => perModel.get(id)?.lastError).find(Boolean);
   throw fail(last?.message || `مدل‌های ابری پس از خطا چند دقیقه کنار گذاشته شده‌اند؛ آخرین خطا: ${earlier || '—'}`);

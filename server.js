@@ -18,6 +18,7 @@ import { CITIES, DEFAULT_CITIES } from './src/sources/divar.js';
 import { diagnose } from './src/diagnose.js';
 import { findRivals } from './src/rivals.js';
 import { cloudCompare, cloudConfig, cloudStatus } from './src/cloudstt.js';
+import { CLOUD_PROMPT, fixCarWords } from './src/vocab.js';
 import { cleanTranscript, estimateMs, LIMITS, parseWav, persistentStatus, recentRuns, startPersistent, stopPersistent, SttError, sttConfig, sttStatus, transcribe } from './src/stt.js';
 import { cpuInfo, cpuLimit } from './src/memory.js';
 import { download, ensureModel } from './src/model.js';
@@ -147,7 +148,7 @@ function startJob(wav) {
   const job = { id, state: 'queued', created: Date.now() };
   jobs.set(id, job);
   job.done = transcribe(wav, undefined, { onStart: () => Object.assign(job, { state: 'running', started: Date.now() }) })
-    .then((r) => Object.assign(job, { state: 'done', text: r.text, raw: r.raw, ms: r.ms, seconds: r.seconds, via: r.via, model: r.model }))
+    .then((r) => Object.assign(job, { state: 'done', text: r.text, raw: r.raw, ms: r.ms, seconds: r.seconds, via: r.via, model: r.model, candidates: r.candidates }))
     .catch((e) => Object.assign(job, { state: 'error', error: e instanceof SttError ? e.message : 'تبدیل گفتار به متن ممکن نشد.' }))
     .finally(() => setTimeout(() => jobs.delete(id), JOB_TTL_MS).unref());
   return job;
@@ -163,8 +164,8 @@ async function waitForJob(job, waitS) {
 }
 
 function jobView(job) {
-  const { state, text, raw, error, ms, seconds, via, model } = job;
-  return { job: job.id, state, text, raw, error, ms, seconds, via, model, waitedMs: Date.now() - job.created, estimateMs: estimateMs() };
+  const { state, text, raw, error, ms, seconds, via, model, candidates } = job;
+  return { job: job.id, state, text, raw, error, ms, seconds, via, model, candidates, waitedMs: Date.now() - job.created, estimateMs: estimateMs() };
 }
 
 const faNum = (v) => String(v ?? '').replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
@@ -297,11 +298,12 @@ async function handle(req, res) {
         const cloud = cloudConfig();
         if (!cloud) throw new SttError('سرویس ابری تنظیم نشده است (STT_API_URL و STT_API_KEY).', 503);
         const cfg = await sttConfig();
-        const results = await cloudCompare(wav, { prompt: cfg.prompt, language: cfg.language }, cloud);
+        const prompt = process.env.STT_API_PROMPT ?? CLOUD_PROMPT;
+        const results = await cloudCompare(wav, { prompt, language: cfg.language }, cloud);
         return send(
           res,
           200,
-          { seconds: info.seconds, results: results.map((r) => ({ ...r, text: r.raw === null ? null : cleanTranscript(r.raw, cfg.prompt) })) },
+          { seconds: info.seconds, results: results.map((r) => ({ ...r, text: r.raw === null ? null : fixCarWords(cleanTranscript(r.raw, prompt)) })) },
           { 'Cache-Control': 'no-store' },
         );
       } catch (e) {
@@ -339,7 +341,7 @@ async function handle(req, res) {
           return send(res, finished ? 200 : 202, jobView(job), { 'Cache-Control': 'no-store' });
         }
         const r = await transcribe(wav);
-        return send(res, 200, { text: r.text, raw: r.raw, ms: r.ms, seconds: r.seconds, via: r.via, model: r.model }, { 'Cache-Control': 'no-store' });
+        return send(res, 200, { text: r.text, raw: r.raw, ms: r.ms, seconds: r.seconds, via: r.via, model: r.model, candidates: r.candidates }, { 'Cache-Control': 'no-store' });
       } catch (e) {
         if (e instanceof SttError) return send(res, e.status, { error: e.message });
         throw e;

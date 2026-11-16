@@ -27,7 +27,7 @@ export function tokens(s) {
 
 export const isNum = (t) => /^\d+$/.test(t);
 
-function levenshtein(a, b) {
+export function levenshtein(a, b) {
   const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
     let diag = prev[0];

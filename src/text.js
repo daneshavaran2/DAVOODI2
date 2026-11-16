@@ -58,6 +58,9 @@ const HUNDREDS = {
 };
 const THOUSAND = 'هزار';
 
+/** کلمهٔ عدد نوشتاری («دویست»، «شیش»، «هزار»، …) */
+export const isNumberWord = (w) => wordValue(w) !== null;
+
 function wordValue(w) {
   if (w in UNITS) return { v: UNITS[w], rank: 1 };
   if (w in TEENS) return { v: TEENS[w], rank: 2 };
@@ -284,7 +287,7 @@ export function parseKm(text) {
 
 // ---------------------------------------------------------------- جملهٔ کاربر
 
-const STOPWORDS = new Set([
+export const STOPWORDS = new Set([
   'قیمت', 'قیمتش', 'قیمتشو', 'قیمت‌', 'ماشین', 'ماشینم', 'خودرو', 'خودروی', 'اتومبیل', 'اتوموبیل',
   'چنده', 'چند', 'چقدر', 'چقد', 'چیه', 'است', 'هست', 'میشه', 'می', 'شه', 'رو', 'را', 'از', 'به', 'برای',
   'بگو', 'بگید', 'بده', 'بدید', 'میخوام', 'میخواستم', 'خوام', 'خواهم', 'خواستم', 'لطفا', 'لطفاً',

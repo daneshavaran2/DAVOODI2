@@ -1,0 +1,93 @@
+// واژه‌های خودرو برای تشخیص گفتار:
+//   ۱) carScore: از میان متن چند مدل تبدیل گفتار، کدام بیشتر شبیه «پرسش قیمت خودرو» است؟
+//      («پژو پارس» بهتر از «بسیش»)
+//   ۲) fixCarWords: کلمه‌ای که تقریباً نام خودرو است اصلاح شود («سرادو» ← «سراتو»، «فیدلیته» ← «فیدلیتی»).
+
+import { isNum, levenshtein, phonetic } from './match.js';
+import { isNumberWord, normalize, STOPWORDS } from './text.js';
+
+// نام سازنده‌ها، خودروها و تیپ‌های رایج بازار ایران (املای معمول)
+const CAR_NAMES = `
+پژو پارس پرشیا روآ آردی پراید تیبا ساینا کوییک شاهین سمند سورن دنا پلاس رانا تارا آریسان هایما پیکان سایپا
+ایرانخودرو مدیران چری تیگو آریزو فونیکس فیدلیتی دیگنیتی جک لاماری بسترن دایون کارا نیسان زامیاد مکسیما
+تویوتا کمری کرولا لندکروزر پرادو یاریس راوفور هایلوکس هیوندای سوناتا توسان النترا اکسنت سانتافه آزرا
+جنسیس وراکروز کیا سراتو اسپورتیج سورنتو اپتیما ریو پیکانتو کادنزا مزدا رنو تندر ساندرو مگان کپچر کولیوس
+داستر سیتروئن زانتیا بنز لکسوس پورشه فولکس شورولت ولوو جیلی امگرند هاوال جتور لیفان برلیانس آریو زوتی
+بایک سوبارو میتسوبیشی پاجرو اوتلندر لندرور رنجرور سوزوکی ویتارا گرندویتارا هوندا آکورد سیویک آئودی
+اینفینیتی کاپرا آریا اطلس کوییک پلاس اسپرت هاچبک صندوقدار اتوماتیک توربو کراس
+`;
+
+// کلمه‌های رایج پرسش (غیر از نام خودرو) که نباید «اصلاح» شوند
+const QUERY_WORDS = `
+تیپ مدل سال قیمت کارکرد کارکرده کیلومتر صفر دست دوم نو اتومات دنده دستی معمولی رنگ سفید مشکی نقره نقره‌ای
+خاکستری آبی قرمز سبز بدون تصادف رنگ‌شدگی فول آپشن هزار میلیون میلیارد تومان تومن دار صندوق کابین دوگانه سوز
+گازسوز شاسی بلند وانت تک دو بنزینی دیزلی هیبرید برقی ساخت تولید ورژن نسخه جدید قدیم قدیمی مدل‌های چه چی چطور
+`;
+
+// نام‌های کوتاه: فقط برای امتیاز (اصلاح کلمهٔ کوتاه خطرناک است: «دیر» ← «تارا»)
+const SHORT_CAR_NAMES = 'جک کیا دنا بنز ریو ام وی کی سی بی جی ال اس تی';
+
+const words = (s) => [...new Set(normalize(s).split(' ').filter((w) => w.length >= 3 && !/[a-z0-9]/.test(w)))];
+const CAR = words(CAR_NAMES);
+const CAR_SET = new Set([...CAR, ...normalize(SHORT_CAR_NAMES).split(' ')]);
+const QUERY = new Set(normalize(QUERY_WORDS).split(' ').filter(Boolean));
+const KEY = new Map(CAR.map((w) => [w, phonetic(w)]));
+
+// برای پرامپت مدل‌های ابری (بدون عدد؛ عدد در پرامپت باعث می‌شد مدل عددهای اشتباه بنویسد)
+export const CLOUD_PROMPT =
+  'قیمت خودرو: پژو پارس، پراید، سمند سورن، دنا پلاس، تیبا، ساینا، کوییک، شاهین، تارا، رانا، آریسان، ' +
+  'هایما، چری تیگو، آریزو، فونیکس، فیدلیتی، دیگنیتی، جک، کیا سراتو، اسپورتیج، تویوتا کمری، هیوندای توسان، النترا، ' +
+  'سوناتا، رنو تندر، مزدا، نیسان، زامیاد، بنز، لکسوس، مدل، کارکرد.';
+
+const known = (t) => isNum(t) || /[a-z]/.test(t) || STOPWORDS.has(t) || QUERY.has(t) || isNumberWord(t) || t === 'و';
+
+/** نزدیک‌ترین نام خودرو به یک کلمه، فقط اگر یکی و نزدیک باشد (وگرنه null) */
+function nearestCar(t) {
+  if (t.length < 4 || CAR_SET.has(t) || known(t)) return null;
+  const k = phonetic(t);
+  let best = null;
+  let bestSim = 0;
+  let tie = false;
+  for (const c of CAR) {
+    let sim = 0;
+    if (c.length >= 4 && KEY.get(c) === k && k.length >= 2) sim = 0.9;
+    else if (c.length >= 4 && 1 - levenshtein(t, c) / Math.max(t.length, c.length) >= 0.75) sim = 0.8;
+    if (sim > bestSim) [best, bestSim, tie] = [c, sim, false];
+    else if (sim && sim === bestSim && c !== best) tie = true;
+  }
+  return best && !tie ? best : null;
+}
+
+/**
+ * امتیاز «پرسش خودرو بودن» یک متن: سهم کلمه‌های شناخته‌شده (نام خودرو، عدد، تیپ، مدل، …)،
+ * به‌اضافهٔ یک اگر دست‌کم یک نام خودرو دارد. متن خالی: ‎-1‎.
+ */
+export function carScore(text) {
+  const tok = normalize(text).split(' ').filter(Boolean);
+  if (!tok.length) return -1;
+  let ok = 0;
+  let car = false;
+  for (const t of tok) {
+    if (CAR_SET.has(t)) {
+      ok += 1;
+      car = true;
+    } else if (known(t)) ok += 1;
+    else if (nearestCar(t)) {
+      ok += 0.6;
+      car = true;
+    }
+  }
+  return ok / tok.length + (car ? 1 : 0);
+}
+
+/** کلمه‌ای که تقریباً نام خودرو است با نام درست جایگزین می‌شود؛ بقیهٔ متن دست نمی‌خورد. */
+export function fixCarWords(text) {
+  return String(text || '')
+    .split(' ')
+    .map((w) => {
+      const n = normalize(w);
+      if (!n || n.includes(' ')) return w;
+      return nearestCar(n) || w;
+    })
+    .join(' ');
+}
