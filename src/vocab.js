@@ -6,6 +6,7 @@
 import { isNum, levenshtein, phonetic } from './match.js';
 import { isNumberWord, normalize, STOPWORDS } from './text.js';
 import { CATALOG_SNAP_WORDS, CATALOG_WORDS, COLOR_PHRASES } from './catalog.js';
+import { learnedWords, learningVersion } from './learning.js';
 
 // نام سازنده‌ها، خودروها و تیپ‌های رایج بازار ایران (املای معمول)
 const CAR_NAMES = `
@@ -31,10 +32,23 @@ const SHORT_CAR_NAMES = 'جک کیا دنا بنز ریو ام وی کی سی ب
 
 const words = (s) => [...new Set(normalize(s).split(' ').filter((w) => w.length >= 3 && !/[a-z0-9]/.test(w)))];
 // به‌اضافهٔ نام برندها و مدل‌های بانک اطلاعاتی (رسپکت، شوال، آزکارا، تانلند، کلوت، ونوسیا، …)
-const CAR = [...new Set([...words(CAR_NAMES), ...CATALOG_SNAP_WORDS.map(normalize)])];
-const CAR_SET = new Set([...CAR, ...normalize(SHORT_CAR_NAMES).split(' '), ...CATALOG_WORDS.map(normalize)]);
+const BASE_CAR = [...new Set([...words(CAR_NAMES), ...CATALOG_SNAP_WORDS.map(normalize)])];
+const BASE_SET = [...BASE_CAR, ...normalize(SHORT_CAR_NAMES).split(' '), ...CATALOG_WORDS.map(normalize)];
 const QUERY = new Set([...normalize(QUERY_WORDS).split(' '), ...COLOR_PHRASES.flatMap((c) => normalize(c).split(' '))].filter(Boolean));
-const KEY = new Map(CAR.map((w) => [w, phonetic(w)]));
+
+// واژه‌نامه = واژه‌های ثابت + واژه‌هایی که مدیر در پنل یاد داده (با هر تغییر آموزش دوباره ساخته می‌شود)
+let CAR = BASE_CAR;
+let CAR_SET = new Set(BASE_SET);
+let KEY = new Map(CAR.map((w) => [w, phonetic(w)]));
+let builtFor = -1;
+function refresh() {
+  if (builtFor === learningVersion()) return;
+  builtFor = learningVersion();
+  const extra = learnedWords().flatMap((w) => normalize(w).split(' ')).filter((w) => w.length >= 2 && !/^\d+$/.test(w));
+  CAR = [...new Set([...BASE_CAR, ...extra.filter((w) => w.length >= 4 && !/[a-z0-9]/.test(w))])];
+  CAR_SET = new Set([...BASE_SET, ...extra]);
+  KEY = new Map(CAR.map((w) => [w, phonetic(w)]));
+}
 
 // برای پرامپت مدل‌های ابری (بدون عدد؛ عدد در پرامپت باعث می‌شد مدل عددهای اشتباه بنویسد)
 export const CLOUD_PROMPT =
@@ -43,10 +57,19 @@ export const CLOUD_PROMPT =
   'سوناتا، رنو تندر، مزدا، نیسان، زامیاد، بنز، لکسوس، بهمن رسپکت، فونیکس، کی ام سی، چانگان، هاوال، بی وای دی، ' +
   'ام وی ام، جیلی، لاماری، مکسوس، بی ام و، مدل، کارکرد.';
 
+/** پرامپت مدل‌های تبدیل گفتار: نام‌های ثابت + واژه‌های یادگرفته در پنل (بدون عدد، حداکثر ۴۰) */
+export function cloudPrompt() {
+  const extra = learnedWords()
+    .map((w) => w.replace(/[0-9۰-۹]+/g, '').replace(/\s+/g, ' ').trim())
+    .filter((w) => w && !CLOUD_PROMPT.includes(w));
+  return extra.length ? `${CLOUD_PROMPT.replace(/\.$/, '')}، ${[...new Set(extra)].slice(-40).join('، ')}.` : CLOUD_PROMPT;
+}
+
 const known = (t) => isNum(t) || /[a-z]/.test(t) || STOPWORDS.has(t) || QUERY.has(t) || isNumberWord(t) || t === 'و';
 
 /** نزدیک‌ترین نام خودرو به یک کلمه، فقط اگر یکی و نزدیک باشد (وگرنه null) */
 function nearestCar(t) {
+  refresh();
   if (t.length < 4 || CAR_SET.has(t) || known(t)) return null;
   const k = phonetic(t);
   let best = null;
@@ -71,6 +94,7 @@ function nearestCar(t) {
  * به‌اضافهٔ یک اگر دست‌کم یک نام خودرو دارد. متن خالی: ‎-1‎.
  */
 export function carScore(text) {
+  refresh();
   const tok = normalize(text).split(' ').filter(Boolean);
   if (!tok.length) return -1;
   let ok = 0;

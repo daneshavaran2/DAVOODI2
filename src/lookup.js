@@ -3,6 +3,7 @@
 import { aggregate, quantile } from './aggregate.js';
 import { parseQuery, toFaDigits } from './text.js';
 import { MODEL_NUMBERS } from './catalog.js';
+import { applyRules } from './learning.js';
 import * as bama from './sources/bama.js';
 import * as divar from './sources/divar.js';
 import * as hamrah from './sources/hamrah.js';
@@ -51,8 +52,19 @@ async function canonicalize(query) {
 }
 
 /** پرسش متنی (همان چیزی که کاربر گفته) ← قیمت‌ها از همهٔ سایت‌ها و جمع‌بندی. */
+/** آزمون آموزش در پنل: قاعده‌ها، برداشت از جمله و نام کامل خودرو، بی‌آن‌که قیمت گرفته شود */
+export async function previewQuery(raw) {
+  const { text, applied } = applyRules(raw, { count: false });
+  const query = parseQuery(text);
+  const canonical = query.carText ? await canonicalize(query) : null;
+  return { text, rules: applied, query, canonical };
+}
+
 export async function lookupAll(raw, opts = {}) {
-  const query = parseQuery(raw);
+  // قاعده‌های اصلاحِ آموزش‌داده‌شده در پنل («لند کروز» ← «لندکروزر»)
+  const { text, applied } = applyRules(raw, { count: opts.countRules !== false });
+  const query = parseQuery(text);
+  if (applied.length) query.rules = applied;
   const example = 'مثلاً بگویید: «پژو ۲۰۶ تیپ ۲ مدل ۱۴۰۰».';
   if (!query.carText) {
     // فقط سال شنیده شد («۲۰۲۶»، «مدل ۱۴۰۴»): نام خودرو را بپرس، نه قیمتِ هر آگهی‌ای که این عدد را دارد

@@ -14,7 +14,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cpuLimit, memoryLimitBytes, memoryStatus } from './memory.js';
 import { cloudConfig, cloudTranscribe, cloudUsable } from './cloudstt.js';
-import { CLOUD_PROMPT, fixCarWords } from './vocab.js';
+import { cloudPrompt, fixCarWords } from './vocab.js';
+import { applyRules } from './learning.js';
 
 const ROOT = fileURLToPath(new URL('../whisper/', import.meta.url));
 /** پوشهٔ مدل‌ها (در کانتینر، دیسک لیارا می‌تواند این‌جا وصل شود) */
@@ -421,11 +422,13 @@ export async function transcribe(wav, cfg, { onStart } = {}) {
     onStart?.();
     const t0 = Date.now();
     try {
-      const prompt = process.env.STT_API_PROMPT ?? CLOUD_PROMPT;
+      const prompt = process.env.STT_API_PROMPT ?? cloudPrompt();
       const { text: raw, model, candidates } = await cloudTranscribe(wav, { prompt, language: cfg.language }, cloud);
       const ms = Date.now() - t0;
       record(info, ms, 'cloud', null, `${cloud.host}، ${model}`);
-      return { text: fixCarWords(cleanTranscript(raw, prompt)), raw: raw.trim(), ms, seconds: info.seconds, via: 'cloud', model, candidates };
+      const heard = fixCarWords(cleanTranscript(raw, prompt));
+      const { text, applied } = applyRules(heard, { count: false });
+      return { text, heard, rules: applied, raw: raw.trim(), ms, seconds: info.seconds, via: 'cloud', model, candidates };
     } catch (e) {
       console.error(`تبدیل گفتار ابری: ${e.message} این بار با whisper خود سرور.`);
     }
@@ -470,7 +473,9 @@ export async function transcribe(wav, cfg, { onStart } = {}) {
     }
     const ms = Date.now() - t0;
     record(info, ms, via, cfg.threads);
-    return { text: fixCarWords(cleanTranscript(raw, cfg.prompt)), raw: raw.trim(), ms, seconds: info.seconds, via, model: nameOf(cfg.model) };
+    const heard = fixCarWords(cleanTranscript(raw, cfg.prompt));
+    const { text, applied } = applyRules(heard, { count: false });
+    return { text, heard, rules: applied, raw: raw.trim(), ms, seconds: info.seconds, via, model: nameOf(cfg.model) };
   } finally {
     release();
     if (dir) await rm(dir, { recursive: true, force: true });

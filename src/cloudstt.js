@@ -22,6 +22,7 @@
 
 import { carScore } from './vocab.js';
 import { CATALOG_NAMES } from './catalog.js';
+import { learnedWords } from './learning.js';
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 // پس از این تعداد خطای پشت‌سرهم، تا مدتی مستقیم سراغ whisper خود سرور می‌رود تا هر بار منتظر خطا نماند
@@ -210,6 +211,12 @@ Rules:
 - Model codes are spoken letter by letter («سی اس پنجاه و پنج», «جی اس», «تی هشت», «سیصد و بیست آی»); write them in Latin like the list (CS55, GS, T8, 320i).
 - If there is no clear speech in the audio, output nothing at all.`;
 
+/** دستور مدل گفت‌وگو به‌اضافهٔ نام‌هایی که مدیر در پنل یاد داده */
+export function chatInstructions() {
+  const extra = learnedWords();
+  return extra.length ? `${CHAT_INSTRUCTIONS}\n- Also these names, taught by the app's owner: ${extra.join('، ')}.` : CHAT_INSTRUCTIONS;
+}
+
 // گفت‌وگو: اول با «بدون فکر کردن» (سریع‌تر برای مدل‌هایی مثل Gemini 2.5 Flash)؛ اگر نپذیرفت، ساده‌تر
 const CHAT_LEVELS = [{ temperature: 0, reasoning: { effort: 'none' } }, { temperature: 0 }, {}];
 
@@ -233,7 +240,7 @@ async function viaChat(wav, id, opts, cfg, timeoutMs) {
     const payload = {
       model: apiModel(id),
       messages: [
-        { role: 'system', content: CHAT_INSTRUCTIONS },
+        { role: 'system', content: chatInstructions() },
         {
           role: 'user',
           content: [

@@ -13,12 +13,16 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize as normPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setFetch } from './src/http.js';
-import { lookupAll, SOURCES } from './src/lookup.js';
+import { lookupAll, previewQuery, SOURCES } from './src/lookup.js';
+import { createSearchLog } from './src/searchlog.js';
+import { initLearning } from './src/learning.js';
+import { adminEnabled, handleAdminApi } from './src/admin.js';
+import { dataDir } from './src/datadir.js';
 import { CITIES, DEFAULT_CITIES } from './src/sources/divar.js';
 import { diagnose } from './src/diagnose.js';
 import { findRivals } from './src/rivals.js';
 import { cloudCompare, cloudConfig, cloudStatus } from './src/cloudstt.js';
-import { CLOUD_PROMPT, fixCarWords } from './src/vocab.js';
+import { cloudPrompt, fixCarWords } from './src/vocab.js';
 import { cleanTranscript, estimateMs, LIMITS, parseWav, persistentStatus, recentRuns, startPersistent, stopPersistent, SttError, sttConfig, sttStatus, transcribe } from './src/stt.js';
 import { cpuInfo, cpuLimit } from './src/memory.js';
 import { download, ensureModel } from './src/model.js';
@@ -137,6 +141,34 @@ async function sttInfo({ detail = false } = {}) {
   };
 }
 
+// گزارش جستجوها برای پنل مدیریت (‎/admin‎)؛ در DATA_DIR ذخیره می‌شود (هنگام اجرای برنامه، نه در آزمون‌ها مگر init شود)
+export const searchLog = createSearchLog();
+
+/** یک جستجو در گزارش: چه پرسیده/شنیده شد، چه برگشت. voice: شمارهٔ کار تبدیل گفتار یا «browser» */
+function logSearch(req, q, voice, result, ms) {
+  const job = voice && voice !== 'browser' ? jobs.get(voice) : null;
+  const sources = result.sources || [];
+  searchLog.add({
+    kind: voice ? 'voice' : 'text',
+    q,
+    heard: job?.heard ?? null,
+    stt: voice === 'browser' ? { via: 'browser' } : job ? { via: job.via, model: job.model, ms: job.ms, raw: job.raw, candidates: job.candidates } : undefined,
+    rules: result.query?.rules?.length ? result.query.rules : undefined,
+    carText: result.query?.carText || null,
+    year: result.query?.year?.value ?? null,
+    km: result.query?.km ?? null,
+    car: result.canonical?.title ?? null,
+    found: Boolean(result.summary),
+    price: result.summary?.estimate ?? null,
+    label: result.summary?.label ?? null,
+    sources: sources.length ? { ok: sources.filter((x) => x.ok && x.items?.length).length, total: sources.length } : undefined,
+    error: result.error ?? null,
+    ms,
+    demo: DEMO || undefined,
+    user: searchLog.userKey(clientIp(req)),
+  });
+}
+
 // کارهای تبدیل گفتار: مرورگر صدا را می‌فرستد و فوراً شمارهٔ کار می‌گیرد، سپس هر چند ثانیه نتیجه را می‌پرسد.
 // تبدیلِ طولانی روی سرور کم‌هسته (ده‌ها ثانیه) به مهلت درخواست در پراکسی سکو (لیارا) نمی‌خورد.
 const jobs = new Map();
@@ -148,7 +180,9 @@ function startJob(wav) {
   const job = { id, state: 'queued', created: Date.now() };
   jobs.set(id, job);
   job.done = transcribe(wav, undefined, { onStart: () => Object.assign(job, { state: 'running', started: Date.now() }) })
-    .then((r) => Object.assign(job, { state: 'done', text: r.text, raw: r.raw, ms: r.ms, seconds: r.seconds, via: r.via, model: r.model, candidates: r.candidates }))
+    .then((r) =>
+      Object.assign(job, { state: 'done', text: r.text, heard: r.heard, rules: r.rules, raw: r.raw, ms: r.ms, seconds: r.seconds, via: r.via, model: r.model, candidates: r.candidates }),
+    )
     .catch((e) => Object.assign(job, { state: 'error', error: e instanceof SttError ? e.message : 'تبدیل گفتار به متن ممکن نشد.' }))
     .finally(() => setTimeout(() => jobs.delete(id), JOB_TTL_MS).unref());
   return job;
@@ -238,8 +272,7 @@ const cacheFor = (ext) =>
   ext === '.woff2' ? 'public, max-age=31536000, immutable' : ['.png', '.svg', '.ico'].includes(ext) ? 'public, max-age=86400' : 'no-cache';
 
 /** در index.html نشانی اسکریپت و استایل نسخه‌دار می‌شود (‎/app.js?v=…‎) تا کش قدیمی دور زده شود */
-async function versionAssets(html) {
-  const names = ['app.js', 'style.css'];
+async function versionAssets(html, names = ['app.js', 'style.css']) {
   const versions = await Promise.all(
     names.map((n) => readFile(join(PUBLIC, n)).then((d) => etagOf(d).slice(1, 11), () => null)),
   );
@@ -263,8 +296,10 @@ async function serveStatic(req, res, pathname) {
   }
   const ext = extname(file);
   if (rel === 'index.html') data = Buffer.from(await versionAssets(data.toString('utf8')));
+  if (rel === 'admin.html') data = Buffer.from(await versionAssets(data.toString('utf8'), ['admin.js', 'admin.css', 'style.css']));
   const etag = etagOf(data);
   const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cacheFor(ext), ETag: etag };
+  if (rel.startsWith('admin')) headers['X-Robots-Tag'] = 'noindex';
   if (req.headers['if-none-match'] === etag) {
     res.writeHead(304, { ...SECURITY_HEADERS, 'Cache-Control': headers['Cache-Control'], ETag: etag });
     return res.end();
@@ -298,7 +333,7 @@ async function handle(req, res) {
         const cloud = cloudConfig();
         if (!cloud) throw new SttError('سرویس ابری تنظیم نشده است (STT_API_URL و STT_API_KEY).', 503);
         const cfg = await sttConfig();
-        const prompt = process.env.STT_API_PROMPT ?? CLOUD_PROMPT;
+        const prompt = process.env.STT_API_PROMPT ?? cloudPrompt();
         const results = await cloudCompare(wav, { prompt, language: cfg.language }, cloud);
         return send(
           res,
@@ -348,7 +383,13 @@ async function handle(req, res) {
       }
     }
 
+    // API پنل مدیریت (GET و POST و DELETE؛ ورود و آموزش)
+    if (url.pathname.startsWith('/admin/api/')) {
+      return await handleAdminApi(req, res, url, { log: searchLog, send, clientIp, preview: previewQuery });
+    }
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Method not allowed' });
+    // پنل مدیریت: صفحه (بی‌داده؛ داده فقط پس از ورود از ‎/admin/api‎)
+    if (url.pathname === '/admin' || url.pathname === '/admin/') return await serveStatic(req, res, '/admin.html');
 
     if (url.pathname === '/api/health') {
       return send(res, 200, { ok: true, demo: DEMO, stt: await sttInfo({ detail: true }), sources: SOURCES.map((s) => s.info) });
@@ -369,7 +410,13 @@ async function handle(req, res) {
       if (!allowed(clientIp(req))) {
         return send(res, 429, { error: 'تعداد درخواست‌ها زیاد است؛ یک دقیقه صبر کنید.' }, { 'Retry-After': '60' });
       }
+      const t0 = Date.now();
       const result = await lookupAll(q, { cities: citiesParam(url.searchParams.get('city')) });
+      try {
+        logSearch(req, q, (url.searchParams.get('voice') || '').slice(0, 40) || null, result, Date.now() - t0);
+      } catch (e) {
+        console.error('ثبت جستجو:', e.message);
+      }
       return send(res, 200, { demo: DEMO, ...result }, { 'Cache-Control': 'no-store' });
     }
 
@@ -462,6 +509,13 @@ if (isMain) {
     });
   }
   instrument(server);
+  // گزارش جستجوها و آموزش پنل مدیریت (پیش از گوش دادن، تا اولین جستجو هم ثبت شود)
+  const [logState, learned] = await Promise.all([searchLog.init(), initLearning()]);
+  console.log(
+    `پنل مدیریت: ${adminEnabled() ? 'روشن (/admin)' : 'خاموش (ADMIN_PASSWORD تنظیم نشده)'}؛ ` +
+      `گزارش جستجوها: ${logState.persistent ? `${logState.count} جستجو در ${dataDir()}` : `فقط در حافظه (${logState.problem})`}؛ ` +
+      `آموزش: ${learned.rules} قاعده، ${learned.words} واژه`,
+  );
   const addrs = networkAddresses();
   console.log(`نشانی‌های شبکهٔ کانتینر: ${addrs.join('، ') || 'هیچ'}${addrs.some((a) => a.includes(':')) ? '' : ' (بدون IPv6)'}`);
   const svc = servicePorts();

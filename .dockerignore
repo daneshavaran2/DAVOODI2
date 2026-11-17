@@ -7,3 +7,4 @@ screenshots
 .env
 test/**
 !test/fixtures/market.json
+data

@@ -22,7 +22,8 @@ ENV NODE_ENV=production \
     PORT=3000 \
     EXTRA_PORTS=80,8080,8000,5000 \
     TRUST_PROXY=1 \
-    WHISPER_REQUIRE_DISK=1
+    WHISPER_REQUIRE_DISK=1 \
+    DATA_DIR=/app/data
 WORKDIR /app
 
 # مدل داخل تصویر، پیش از کپی کد تا با هر تغییر کد دوباره دانلود نشود
@@ -40,7 +41,7 @@ COPY public ./public
 COPY test/fixtures/market.json ./test/fixtures/market.json
 # پوشهٔ مدل از پیش ساخته و برای هر کاربری قابل نوشتن است؛ چون سکو ممکن است کانتینر را با کاربر
 # غیر root (حتی با UID دلخواه) اجرا کند و آن وقت ساختن این پوشه هنگام اجرا ممکن نیست
-RUN mkdir -p /app/whisper/models && chmod 0777 /app/whisper/models
+RUN mkdir -p /app/whisper/models /app/data && chmod 0777 /app/whisper/models /app/data
 
 EXPOSE 3000 80 8080 8000 5000
 # پوشهٔ مدل را برای کاربر node قابل نوشتن می‌کند (دیسک لیارا معمولاً مال root است) و برنامه را با کاربر node اجرا می‌کند

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0e1b2c">
+  <title>پنل مدیریت داوودی</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="bar-in">
+      <a class="brand" href="/admin">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span><b>پنل مدیریت</b><small>دستیار هوشمند خودرو داوودی</small></span>
+      </a>
+      <div class="bar-actions" id="barActions" hidden>
+        <a class="btn btn-ghost" id="csvLink" href="/admin/api/export.csv?days=90" download>خروجی Excel</a>
+        <button class="btn btn-ghost" id="logout" type="button">خروج</button>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="بخش‌های پنل" hidden>
+      <button type="button" role="tab" id="tab-overview" data-tab="overview" aria-controls="overview">خلاصه</button>
+      <button type="button" role="tab" id="tab-searches" data-tab="searches" aria-controls="searches">جستجوها</button>
+      <button type="button" role="tab" id="tab-train" data-tab="train" aria-controls="train">آموزش</button>
+    </nav>
+  </header>
+
+  <main id="main" class="wrap">
+    <section id="login" class="card login" hidden>
+      <h1>ورود به پنل مدیریت</h1>
+      <p class="muted" id="loginNote">رمز پنل همان مقدار <code>ADMIN_PASSWORD</code> در تنظیمات برنامه در لیاراست.</p>
+      <form id="loginForm" autocomplete="on">
+        <label for="password">رمز</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button class="btn btn-primary" type="submit">ورود</button>
+        <p class="form-error" id="loginError" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="overview" role="tabpanel" aria-labelledby="tab-overview" hidden></section>
+    <section id="searches" role="tabpanel" aria-labelledby="tab-searches" hidden></section>
+    <section id="train" role="tabpanel" aria-labelledby="tab-train" hidden></section>
+  </main>
+
+  <dialog id="teach" class="sheet" aria-labelledby="teachTitle">
+    <form id="teachForm" method="dialog">
+      <h2 id="teachTitle">آموزش: این را درست بفهم</h2>
+      <p class="muted small" id="teachContext"></p>
+      <label for="teachFrom">عبارتی که اشتباه شنیده یا نوشته شد</label>
+      <input id="teachFrom" required maxlength="120">
+      <p class="hint">فقط بخش اشتباه را نگه دارید، نه سال و کارکرد را؛ مثلاً «لند کروز».</p>
+      <label for="teachTo">منظور درست</label>
+      <input id="teachTo" required maxlength="120" placeholder="مثلاً: تویوتا لندکروزر">
+      <div class="teach-preview" id="teachPreview" aria-live="polite"></div>
+      <div class="row-actions">
+        <button class="btn btn-primary" type="submit" value="save">ذخیرهٔ آموزش</button>
+        <button class="btn" type="button" id="teachTry">امتحان</button>
+        <button class="btn btn-ghost-dark" type="button" id="teachCancel">انصراف</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="tip" id="tip" role="tooltip" hidden></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="/admin.js"></script>
+</body>
+</html>

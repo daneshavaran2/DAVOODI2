@@ -174,10 +174,11 @@ function watchStt() {
   }, 15_000);
 }
 
-function heard(text) {
+/** voice: شمارهٔ کار تبدیل گفتار روی سرور، یا «browser» (تشخیص گفتار خود مرورگر)؛ برای گزارش پنل مدیریت */
+function heard(text, voice = 'browser') {
   input.value = text;
   setStatus(`شنیدم: «${text}»`);
-  search(text);
+  search(text, { voice });
 }
 
 // ---------- حالت server
@@ -228,7 +229,7 @@ async function startServerVoice() {
     const data = await serverTranscribe(wav);
     if (DEBUG) showVoiceDebug(wav, info, { ...data, totalMs: Date.now() - t0 });
     if (!data.text) setStatus('متوجه نشدم؛ لطفاً دوباره و شمرده‌تر بگویید.', true);
-    else heard(data.text);
+    else heard(data.text, data.job || 'server');
   } catch (e) {
     if (DEBUG) showVoiceDebug(wav, info, null, e.message);
     setStatus(e.message || 'تبدیل گفتار به متن ممکن نشد.', true);
@@ -435,7 +436,7 @@ function startBrowserVoice() {
     setListening(false);
     const text = finalText.trim() || input.value.trim();
     if (text) debugNote(`حالت صدا: ${VOICE_MODE_LABEL.browser} — شنید: «${text}»`);
-    if (text && !(failed && !finalText.trim())) heard(text);
+    if (text && !(failed && !finalText.trim())) heard(text, 'browser');
     else if (!failed) setStatus('چیزی شنیده نشد؛ دوباره امتحان کنید.', true);
   };
   try {
@@ -539,7 +540,7 @@ $('#dockNew').addEventListener('click', newSearch);
 
 const SEARCH_TIMEOUT_MS = 75_000;
 
-async function search(q) {
+async function search(q, { voice = null } = {}) {
   controller?.abort();
   const ctrl = (controller = new AbortController());
   let timedOut = false;
@@ -548,6 +549,7 @@ async function search(q) {
     ctrl.abort();
   }, SEARCH_TIMEOUT_MS);
   const params = new URLSearchParams({ q });
+  if (voice) params.set('voice', voice);
   history.replaceState(null, '', `?q=${encodeURIComponent(q)}`);
   renderLoading();
   try {
